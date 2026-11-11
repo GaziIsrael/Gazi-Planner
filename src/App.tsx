@@ -16,16 +16,20 @@ import {
   CornerDownRight,
   X,
   UserCheck,
-  CircleDot
+  CircleDot,
+  FolderKanban,
+  Users,
+  SearchCode,
+  ArrowUpRight
 } from 'lucide-react';
 
 export default function App() {
-  const [view, setView] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'mos' | 'compass' | 'review'>('daily');
+  const [view, setView] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'mos' | 'compass' | 'review' | 'projects' | 'delegated' | 'search'>('daily');
   const [isDark, setIsDark] = useState(false);
   const [appName, setAppName] = useState(() => localStorage.getItem('planbae_app_name') || 'Plan BAE');
   const [isEditingName, setIsEditingName] = useState(false);
 
-  // Task & Schedule Data
+  // Daily Tasks
   const [tasks, setTasks] = useState(() => {
     const saved = localStorage.getItem('planbae_tasks');
     return saved ? JSON.parse(saved) : [
@@ -36,6 +40,25 @@ export default function App() {
     ];
   });
 
+  // Projects
+  const [projects, setProjects] = useState(() => {
+    const saved = localStorage.getItem('planbae_projects');
+    return saved ? JSON.parse(saved) : [
+      { 
+        id: 1, 
+        title: '2027년 사역기획', 
+        tag: 'Pastoral', 
+        deadline: '미지정', 
+        progress: 0,
+        subtasks: [
+          { id: 101, title: '올해 사역 피드백', status: 'not_started', priority: 'B', tag: 'Q1' },
+          { id: 102, title: '팀장 회의 소집', status: 'not_started', priority: 'B', tag: 'Q1' }
+        ]
+      }
+    ];
+  });
+
+  // Schedule
   const [schedule, setSchedule] = useState(() => {
     const saved = localStorage.getItem('planbae_schedule');
     return saved ? JSON.parse(saved) : [
@@ -47,6 +70,8 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showStatusMenu, setShowStatusMenu] = useState<number | null>(null);
   const [quickInput, setQuickInput] = useState('');
+  const [newSubtaskInput, setNewSubtaskInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Foundation & Target States
   const [mosMission, setMosMission] = useState(() => localStorage.getItem('planbae_mos_mission') || '');
@@ -70,6 +95,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('planbae_tasks', JSON.stringify(tasks));
   }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem('planbae_projects', JSON.stringify(projects));
+  }, [projects]);
 
   useEffect(() => {
     localStorage.setItem('planbae_schedule', JSON.stringify(schedule));
@@ -103,6 +132,22 @@ export default function App() {
       };
       setTasks([...tasks, newTask]);
       setQuickInput('');
+    }
+  };
+
+  const handleAddSubtask = (projectId: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && newSubtaskInput.trim()) {
+      setProjects(projects.map(p => {
+        if (p.id === projectId) {
+          const updatedSubtasks = [
+            ...p.subtasks,
+            { id: Date.now(), title: newSubtaskInput.trim(), status: 'not_started', priority: 'B', tag: 'Q1' }
+          ];
+          return { ...p, subtasks: updatedSubtasks };
+        }
+        return p;
+      }));
+      setNewSubtaskInput('');
     }
   };
 
@@ -168,6 +213,7 @@ export default function App() {
           </div>
 
           <div className="space-y-6">
+            {/* Foundation */}
             <div>
               <div className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest px-2 mb-1.5">Foundation</div>
               <nav className="space-y-0.5">
@@ -188,6 +234,7 @@ export default function App() {
               </nav>
             </div>
 
+            {/* Planner */}
             <div>
               <div className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest px-2 mb-1.5">Planner</div>
               <nav className="space-y-0.5">
@@ -222,15 +269,37 @@ export default function App() {
               </nav>
             </div>
 
+            {/* Workspace (누락 메뉴 완전 복원) */}
             <div>
               <div className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest px-2 mb-1.5">Workspace</div>
               <nav className="space-y-0.5">
+                <button 
+                  onClick={() => setView('projects')} 
+                  className={view === 'projects' ? 'w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md bg-[#ECE7DD] dark:bg-[#26262B] font-semibold text-[#2C3A4E] dark:text-stone-100' : 'w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md text-stone-600 dark:text-stone-400 hover:bg-[#F2EEE6] dark:hover:bg-stone-800/60'}
+                >
+                  <FolderKanban className="w-4 h-4" />
+                  <span>프로젝트</span>
+                </button>
+                <button 
+                  onClick={() => setView('delegated')} 
+                  className={view === 'delegated' ? 'w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md bg-[#ECE7DD] dark:bg-[#26262B] font-semibold text-[#2C3A4E] dark:text-stone-100' : 'w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md text-stone-600 dark:text-stone-400 hover:bg-[#F2EEE6] dark:hover:bg-stone-800/60'}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>위임한 일</span>
+                </button>
                 <button 
                   onClick={() => setView('review')} 
                   className={view === 'review' ? 'w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md bg-[#ECE7DD] dark:bg-[#26262B] font-semibold text-[#2C3A4E] dark:text-stone-100' : 'w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md text-stone-600 dark:text-stone-400 hover:bg-[#F2EEE6] dark:hover:bg-stone-800/60'}
                 >
                   <FileText className="w-4 h-4" />
                   <span>Review</span>
+                </button>
+                <button 
+                  onClick={() => setView('search')} 
+                  className={view === 'search' ? 'w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md bg-[#ECE7DD] dark:bg-[#26262B] font-semibold text-[#2C3A4E] dark:text-stone-100' : 'w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-md text-stone-600 dark:text-stone-400 hover:bg-[#F2EEE6] dark:hover:bg-stone-800/60'}
+                >
+                  <SearchCode className="w-4 h-4" />
+                  <span>노트 검색</span>
                 </button>
               </nav>
             </div>
@@ -271,15 +340,19 @@ export default function App() {
         {/* Header */}
         <header className="h-14 border-b border-[#E6E1D6] dark:border-[#3A3A40] flex items-center justify-between px-8 shrink-0">
           <div className="text-xs tracking-wider text-stone-600 uppercase font-sans">
-            PLANNER / {view.toUpperCase()}
+            {view === 'projects' ? 'WORKSPACE / 프로젝트' : 
+             view === 'delegated' ? 'WORKSPACE / 위임한 일' : 
+             view === 'search' ? 'WORKSPACE / 노트 검색' : 
+             view === 'review' ? 'WORKSPACE / Review' : 
+             `PLANNER / ${view.toUpperCase()}`}
           </div>
           <div className="flex items-center space-x-3">
-            <button className="p-1.5 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200">
+            <button onClick={() => setView('search')} className="p-1.5 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200">
               <Search className="w-4 h-4" />
             </button>
             <div className="h-4 w-px bg-stone-300 dark:bg-stone-700"></div>
             <button 
-              onClick={() => setCurrentTime(new Date())} 
+              onClick={() => { setView('daily'); setCurrentTime(new Date()); }} 
               className="px-2.5 py-1 text-xs border border-stone-300 dark:border-stone-700 rounded bg-white dark:bg-stone-800 hover:bg-stone-50"
             >
               오늘
@@ -309,7 +382,6 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Left: Priorities & Notes */}
                 <div className="space-y-6">
                   <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
                     <div className="flex items-center justify-between mb-4">
@@ -460,7 +532,152 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. MONTHLY VIEW */}
+          {/* 2. PROJECTS (스크린샷 완벽 재현) */}
+          {view === 'projects' && (
+            <div className="max-w-5xl mx-auto space-y-6">
+              <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider text-stone-600">PROJECTS</div>
+                  <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">프로젝트</h1>
+                  <p className="text-xs text-stone-500 mt-1">마감일과 선행 업무를 연결하고, 같은 체크 상태를 모든 계획 화면에서 확인합니다.</p>
+                </div>
+                <button className="px-3 py-1.5 bg-[#2C3A4E] dark:bg-stone-700 text-white rounded text-xs flex items-center space-x-1">
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>프로젝트 추가</span>
+                </button>
+              </div>
+
+              {projects.map(proj => (
+                <div key={proj.id} className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-4">
+                  <div className="flex justify-between items-center border-b border-stone-100 dark:border-stone-800 pb-3">
+                    <div className="flex items-center space-x-2">
+                      <FolderKanban className="w-4 h-4 text-[#2C3A4E] dark:text-stone-300" />
+                      <h2 className="text-base font-bold font-serif">{proj.title}</h2>
+                      <span className="text-[10px] bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded text-stone-600">{proj.tag}</span>
+                    </div>
+                    <div className="flex items-center space-x-3 text-xs">
+                      <button className="text-stone-500 hover:text-stone-800">열기</button>
+                      <button className="text-stone-500 hover:text-stone-800">편집</button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-stone-500">
+                    <span>마감일 {proj.deadline}</span>
+                    <span className="font-bold text-[#2C3A4E] dark:text-stone-300">{proj.progress}%</span>
+                  </div>
+
+                  <input 
+                    type="text" 
+                    placeholder="하위 업무를 적고 Enter로 추가..." 
+                    value={newSubtaskInput}
+                    onChange={(e) => setNewSubtaskInput(e.target.value)}
+                    onKeyDown={(e) => handleAddSubtask(proj.id, e)}
+                    className="w-full border border-stone-200 dark:border-stone-700 rounded px-3 py-2 text-xs bg-[#FBF9F4] dark:bg-stone-800 outline-none"
+                  />
+
+                  <div className="space-y-2 pt-1">
+                    <div className="text-[11px] text-stone-500">0 / {proj.subtasks.length} 완료</div>
+                    {proj.subtasks.map(st => (
+                      <div key={st.id} className="flex items-center justify-between py-1.5 border-b border-dashed border-stone-200 dark:border-stone-800 text-xs">
+                        <div className="flex items-center space-x-2.5">
+                          <button onClick={() => updateTaskStatus(st.id, 'completed')}>
+                            {renderStatusSymbol(st.status)}
+                          </button>
+                          <span>{st.title}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-serif bg-stone-100 dark:bg-stone-800 px-1 rounded">{st.priority}</span>
+                          <span className="text-[10px] text-stone-500 bg-stone-100 dark:bg-stone-800 px-1 rounded">{st.tag}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 3. DELEGATED (위임한 일) */}
+          {view === 'delegated' && (
+            <div className="max-w-5xl mx-auto space-y-6">
+              <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
+                <div className="text-[11px] uppercase tracking-wider text-stone-600">DELEGATED TASKS</div>
+                <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">위임한 일</h1>
+                <p className="text-xs text-stone-500 mt-1">팀원이나 동역자에게 위임한 업무의 진행 상황과 마감일을 추적합니다.</p>
+              </div>
+
+              <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3 text-xs font-semibold text-stone-600">
+                    <span>업무 내용</span>
+                    <span>담당자 / 마감</span>
+                  </div>
+                  {tasks.filter(t => t.status === 'delegated').length === 0 ? (
+                    <div className="text-center py-10 text-xs text-stone-400">
+                      현재 위임된 업무가 없습니다. 할 일에서 상태를 '⊙ 위임'으로 선택하면 이곳에 정리됩니다.
+                    </div>
+                  ) : (
+                    tasks.filter(t => t.status === 'delegated').map(t => (
+                      <div key={t.id} className="flex justify-between items-center py-2 border-b border-stone-100 dark:border-stone-800 text-xs">
+                        <div className="flex items-center space-x-2">
+                          <UserCheck className="w-4 h-4 text-indigo-600" />
+                          <span>{t.title}</span>
+                        </div>
+                        <span className="text-[11px] text-stone-500">배정일 {t.date}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. NOTE SEARCH (노트 검색) */}
+          {view === 'search' && (
+            <div className="max-w-5xl mx-auto space-y-6">
+              <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
+                <div className="text-[11px] uppercase tracking-wider text-stone-600">SEARCH</div>
+                <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">노트 검색</h1>
+                <p className="text-xs text-stone-500 mt-1">자유 노트, 사명 선언서, 플래너에 적힌 모든 기록을 검색합니다.</p>
+              </div>
+
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-stone-400" />
+                <input 
+                  type="text" 
+                  placeholder="검색어를 입력하세요 (예: 기도, 말씀, 회의...)"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg text-xs outline-none"
+                />
+              </div>
+
+              <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-3">
+                <div className="text-xs font-semibold text-stone-600">검색 결과</div>
+                <div className="space-y-3 pt-2">
+                  {dailyNote && dailyNote.includes(searchQuery) && (
+                    <div className="p-3 bg-[#FAF6EE] dark:bg-stone-800 rounded border border-stone-200 dark:border-stone-700 text-xs">
+                      <div className="font-bold text-[#2C3A4E] dark:text-stone-200 mb-1">자유 노트 (11월 11일)</div>
+                      <div className="text-stone-600 dark:text-stone-400">{dailyNote}</div>
+                    </div>
+                  )}
+                  {mosMission && mosMission.includes(searchQuery) && (
+                    <div className="p-3 bg-[#FAF6EE] dark:bg-stone-800 rounded border border-stone-200 dark:border-stone-700 text-xs">
+                      <div className="font-bold text-[#2C3A4E] dark:text-stone-200 mb-1">M · 사명 선언서</div>
+                      <div className="text-stone-600 dark:text-stone-400">{mosMission}</div>
+                    </div>
+                  )}
+                  {(!dailyNote.includes(searchQuery) && !mosMission.includes(searchQuery)) && (
+                    <div className="text-xs text-stone-400 py-6 text-center">
+                      일치하는 노트 기록이 없습니다.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 5. MONTHLY VIEW */}
           {view === 'monthly' && (
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -556,7 +773,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 3. YEARLY VIEW */}
+          {/* 6. YEARLY VIEW */}
           {view === 'yearly' && (
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -628,7 +845,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 4. FOUNDATION / M/O/S */}
+          {/* 7. FOUNDATION / M/O/S */}
           {view === 'mos' && (
             <div className="max-w-4xl mx-auto space-y-6">
               <div className="border-b border-stone-200 dark:border-stone-800 pb-4 flex justify-between items-baseline">
@@ -658,7 +875,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 5. WEEKLY COMPASS */}
+          {/* 8. WEEKLY COMPASS */}
           {view === 'compass' && (
             <div className="max-w-5xl mx-auto space-y-6">
               <div className="border-b border-stone-200 dark:border-stone-800 pb-4 flex justify-between items-baseline">
@@ -703,7 +920,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 6. REVIEW */}
+          {/* 9. REVIEW */}
           {view === 'review' && (
             <div className="max-w-5xl mx-auto space-y-6">
               <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -759,7 +976,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 7. WEEKLY TIMETABLE */}
+          {/* 10. WEEKLY TIMETABLE */}
           {view === 'weekly' && (
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="border-b border-stone-200 dark:border-stone-800 pb-4">

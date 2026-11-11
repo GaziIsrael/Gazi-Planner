@@ -354,4 +354,449 @@ export default function App() {
                                   <button onClick={() => setShowStatusMenu(showStatusMenu === task.id ? null : task.id)}>
                                     {renderStatusSymbol(task.status)}
                                   </button>
-                                  <span className={task.status === 'completed' || task.
+                                  <span className={task.status === 'completed' || task.status === 'cancelled' ? 'line-through text-stone-400' : ''}>
+                                    {task.title}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-stone-500 bg-stone-100 dark:bg-stone-800 px-1 rounded">{task.tag}</span>
+
+                                {showStatusMenu === task.id && (
+                                  <div className="absolute left-0 top-7 z-30 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-600 shadow-md rounded p-1 text-[11px] grid grid-cols-3 gap-1 w-52">
+                                    <button onClick={() => updateTaskStatus(task.id, 'completed')} className="p-1 hover:bg-stone-100 dark:hover:bg-stone-700 text-left">✓ 완료</button>
+                                    <button onClick={() => updateTaskStatus(task.id, 'postponed')} className="p-1 hover:bg-stone-100 dark:hover:bg-stone-700 text-left">→ 연기</button>
+                                    <button onClick={() => updateTaskStatus(task.id, 'cancelled')} className="p-1 hover:bg-stone-100 dark:hover:bg-stone-700 text-left">✕ 취소</button>
+                                    <button onClick={() => updateTaskStatus(task.id, 'delegated')} className="p-1 hover:bg-stone-100 dark:hover:bg-stone-700 text-left">⊙ 위임</button>
+                                    <button onClick={() => updateTaskStatus(task.id, 'in_progress')} className="p-1 hover:bg-stone-100 dark:hover:bg-stone-700 text-left">• 진행 중</button>
+                                    <button onClick={() => updateTaskStatus(task.id, 'not_started')} className="p-1 hover:bg-stone-100 dark:hover:bg-stone-700 text-left">☐ 미시작</button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">03 · Notes</span>
+                        <h2 className="text-base font-bold font-serif">자유 노트</h2>
+                      </div>
+                      <span className="text-[11px] text-stone-500">자동 저장</span>
+                    </div>
+                    <textarea 
+                      rows={5}
+                      value={dailyNote}
+                      onChange={(e) => setDailyNote(e.target.value)}
+                      placeholder="오늘 남겨두고 싶은 생각, 기도, 메모..."
+                      className="w-full bg-transparent outline-none text-xs leading-relaxed resize-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Right: 24h Schedule */}
+                <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs flex flex-col h-[740px]">
+                  <div className="flex items-center justify-between mb-4 border-b border-stone-200 dark:border-stone-800 pb-3">
+                    <div>
+                      <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">02 · Schedule</span>
+                      <h2 className="text-base font-bold font-serif">24시간 시간표</h2>
+                    </div>
+                    <span className="text-xs text-stone-600">현재 {formattedCurrentTime}</span>
+                  </div>
+
+                  <div className="relative flex-1 overflow-y-auto pr-2">
+                    <div 
+                      className="absolute left-0 right-0 z-20 flex items-center pointer-events-none"
+                      style={{ top: ((currentMinutes / 1440) * 1200) + 'px' }}
+                    >
+                      <span className="bg-[#C24B40] text-white text-[9px] font-mono px-1 rounded font-bold mr-1">
+                        {formattedCurrentTime}
+                      </span>
+                      <div className="flex-1 h-[1.5px] bg-[#C24B40]"></div>
+                    </div>
+
+                    <div className="relative" style={{ height: '1200px' }}>
+                      {Array.from({ length: 25 }, (_, i) => (
+                        <div 
+                          key={i} 
+                          className="absolute w-full flex items-start border-t border-stone-200 dark:border-stone-800/80"
+                          style={{ top: ((i / 24) * 1200) + 'px', height: '50px' }}
+                        >
+                          <span className="w-12 text-[10px] text-stone-500 font-mono -mt-2 bg-transparent select-none">
+                            {String(i).padStart(2, '0')}:00
+                          </span>
+                        </div>
+                      ))}
+
+                      {schedule.map(evt => {
+                        const [startH, startM] = evt.start.split(':').map(Number);
+                        const [endH, endM] = evt.end.split(':').map(Number);
+                        const startMins = startH * 60 + startM;
+                        const endMins = endH * 60 + endM;
+                        const top = (startMins / 1440) * 1200;
+                        const height = ((endMins - startMins) / 1440) * 1200;
+
+                        return (
+                          <div 
+                            key={evt.id}
+                            className="absolute left-14 right-2 bg-stone-100 dark:bg-stone-800 border-l-2 border-[#2C3A4E] p-2 rounded text-xs z-10 shadow-xs"
+                            style={{ top: top + 'px', height: Math.max(height, 28) + 'px' }}
+                          >
+                            <div className="font-semibold text-stone-800 dark:text-stone-200 flex justify-between">
+                              <span>{evt.title}</span>
+                              <span className="text-[10px] text-stone-500 font-mono">{evt.start} - {evt.end}</span>
+                            </div>
+                            <span className="text-[10px] text-stone-500">{evt.tag}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. MONTHLY VIEW */}
+          {view === 'monthly' && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider text-stone-600">MONTHLY</div>
+                  <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">2026년 11월</h1>
+                  <p className="text-xs text-stone-500 mt-1">날짜 숫자 → Daily · 날짜 칸이나 + → 계획 확인과 추가</p>
+                </div>
+                <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
+                  <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronLeft className="w-4 h-4" /></button>
+                  <button onClick={() => setView('review')} className="px-2 font-medium flex items-center space-x-1">
+                    <FileText className="w-3.5 h-3.5 mr-1" /> 월간 Review
+                  </button>
+                  <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronRight className="w-4 h-4" /></button>
+                </div>
+              </div>
+
+              <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-4 border-b border-stone-200 dark:border-stone-800 pb-2">
+                  <span className="text-xs font-serif font-bold">월간 달력</span>
+                  <div className="flex space-x-1 text-xs">
+                    <button className="px-2 py-0.5 bg-[#ECE7DD] dark:bg-stone-700 rounded font-medium">캘린더</button>
+                    <button className="px-2 py-0.5 text-stone-500">목록</button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-px text-center text-xs font-semibold text-stone-600 mb-2">
+                  <div className="text-rose-500">주일</div>
+                  <div>월</div>
+                  <div>화</div>
+                  <div>수</div>
+                  <div>목</div>
+                  <div>금</div>
+                  <div className="text-blue-500">토</div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-px bg-stone-200 dark:bg-stone-700 border border-stone-200 dark:border-stone-700 rounded overflow-hidden text-xs">
+                  {Array.from({ length: 35 }, (_, idx) => {
+                    const dayNum = idx + 1;
+                    const isToday = dayNum === 11;
+                    const cellBg = isToday ? 'bg-[#FAF6EE] dark:bg-stone-800 font-bold' : 'bg-white dark:bg-[#202024] hover:bg-stone-50';
+                    return (
+                      <div key={idx} className={"h-24 p-1.5 flex flex-col justify-between transition-colors " + cellBg}>
+                        <div className="flex justify-between items-center">
+                          <span className={idx % 7 === 0 ? 'text-rose-500' : idx % 7 === 6 ? 'text-blue-500' : ''}>
+                            {dayNum <= 30 ? dayNum : dayNum - 30}
+                          </span>
+                          <span className="text-[10px] text-stone-400 opacity-60">+</span>
+                        </div>
+                        {dayNum === 8 && (
+                          <div className="bg-stone-100 dark:bg-stone-700 p-1 rounded text-[10px] text-stone-700 dark:text-stone-300">
+                            20:00 40일 철야
+                          </div>
+                        )}
+                        {dayNum === 10 && (
+                          <div className="text-[10px] text-stone-600 flex items-center space-x-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            <span>플래너 제작</span>
+                          </div>
+                        )}
+                        <div></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-3">
+                  <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">INTENTIONS</span>
+                  <h3 className="text-sm font-bold font-serif">월간 목표</h3>
+                  <p className="text-xs text-stone-500">이달의 방향: 이번 달에는 무엇에 마음을 두고 싶나요?</p>
+                  <input 
+                    type="text" 
+                    value={monthGoal}
+                    onChange={(e) => setMonthGoal(e.target.value)}
+                    className="w-full border border-stone-200 dark:border-stone-700 rounded px-3 py-2 text-xs bg-transparent outline-none"
+                    placeholder="이달의 중요 목표를 적으세요..."
+                  />
+                </div>
+
+                <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-3">
+                  <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">CALENDAR</span>
+                  <h3 className="text-sm font-bold font-serif">연결된 일정</h3>
+                  <div className="border-t border-stone-100 dark:border-stone-800 pt-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold">40일 철야</span>
+                      <span className="text-[11px] text-stone-500">11.8 주일 · 20:00~22:40 · Pastoral</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. YEARLY VIEW */}
+          {view === 'yearly' && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider text-stone-600">YEARLY</div>
+                  <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">2026년</h1>
+                  <p className="text-xs text-stone-500 mt-1">한 해의 방향과 목표를 정하고, 올해의 성취와 변화를 기록합니다.</p>
+                </div>
+                <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
+                  <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronLeft className="w-4 h-4" /></button>
+                  <button onClick={() => setView('review')} className="px-2 font-medium flex items-center space-x-1">
+                    <FileText className="w-3.5 h-3.5 mr-1" /> 연간 Review
+                  </button>
+                  <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronRight className="w-4 h-4" /></button>
+                </div>
+              </div>
+
+              <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
+                <div className="flex justify-between items-center mb-6 border-b border-stone-200 dark:border-stone-800 pb-2">
+                  <div>
+                    <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">YEAR AT A GLANCE</span>
+                    <h2 className="text-base font-bold font-serif">한눈에 보는 한해</h2>
+                  </div>
+                  <div className="text-xs text-stone-500">총 365일 · 지나온 날 315일 · 남은 날 50일</div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  {[
+                    '01 JAN', '02 FEB', '03 MAR', '04 APR',
+                    '05 MAY', '06 JUN', '07 JUL', '08 AUG',
+                    '09 SEP', '10 OCT', '11 NOV', '12 DEC'
+                  ].map((monthTitle, mIdx) => (
+                    <div key={monthTitle} className="border border-stone-100 dark:border-stone-800 p-2.5 rounded">
+                      <div className="text-xs font-serif font-bold text-stone-700 dark:text-stone-300 mb-2 border-b border-stone-100 dark:border-stone-800 pb-1">
+                        {monthTitle}
+                      </div>
+                      <div className="grid grid-cols-7 gap-1 text-[9px] text-center text-stone-600 mb-1">
+                        <span className="text-rose-500">일</span>
+                        <span>월</span><span>화</span><span>수</span><span>목</span><span>금</span>
+                        <span className="text-blue-500">토</span>
+                      </div>
+                      <div className="grid grid-cols-7 gap-1 text-[9px] text-center">
+                        {Array.from({ length: 31 }, (_, d) => (
+                          <span 
+                            key={d} 
+                            className={mIdx === 10 && d === 10 ? 'py-0.5 rounded bg-[#2C3A4E] text-white font-bold' : 'py-0.5 rounded text-stone-600 dark:text-stone-400'}
+                          >
+                            {d + 1}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-4">
+                <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">INTENTIONS</span>
+                <h3 className="text-base font-bold font-serif">연간 목표 & 방향</h3>
+                <p className="text-xs text-stone-500">올해의 방향: 올해 어떤 방향으로 나아가고 싶나요?</p>
+                <textarea 
+                  rows={3}
+                  value={yearDirection}
+                  onChange={(e) => setYearDirection(e.target.value)}
+                  placeholder="올해 이루고 싶은 중요한 목표와 삶의 방향을 적어보세요..."
+                  className="w-full border border-stone-200 dark:border-stone-700 rounded px-3 py-2 text-xs bg-transparent outline-none resize-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 4. FOUNDATION / M/O/S */}
+          {view === 'mos' && (
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div className="border-b border-stone-200 dark:border-stone-800 pb-4 flex justify-between items-baseline">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider text-stone-600">MOSAIC Foundation</div>
+                  <h1 className="text-3xl font-serif font-bold tracking-tight">M/O/S</h1>
+                  <p className="text-xs text-stone-500 mt-1">사명을 서술하고, 목표와 전략을 아웃라인으로 연결합니다.</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-stone-600">Draft · 자동 저장</span>
+                  <button className="px-3 py-1 bg-[#2C3A4E] dark:bg-stone-700 text-white rounded text-xs">✓ 비전 확정</button>
+                </div>
+              </div>
+
+              <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-6 space-y-3 shadow-xs">
+                <span className="text-[#2C3A4E] font-serif font-bold text-xs uppercase tracking-wider block">Mission</span>
+                <h2 className="text-base font-bold font-serif">M · 사명</h2>
+                <p className="text-xs text-stone-500">하나님께 맡겨진 삶을 무엇을 위해 살아가나요?</p>
+                <textarea 
+                  rows={6}
+                  value={mosMission}
+                  onChange={(e) => setMosMission(e.target.value)}
+                  placeholder="문단으로 자유롭게 작성하세요..."
+                  className="w-full bg-transparent outline-none text-xs leading-relaxed resize-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 5. WEEKLY COMPASS */}
+          {view === 'compass' && (
+            <div className="max-w-5xl mx-auto space-y-6">
+              <div className="border-b border-stone-200 dark:border-stone-800 pb-4 flex justify-between items-baseline">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider text-stone-600">Foundation</div>
+                  <h1 className="text-3xl font-serif font-bold tracking-tight">Weekly Compass</h1>
+                  <p className="text-xs text-stone-500 mt-1">역할마다 이번 주의 Big Rock을 정하고 삶의 균형을 맞춥니다.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-4">
+                  <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">SHARPEN THE SAW</span>
+                  <h3 className="text-sm font-bold font-serif">자기계발 (4대 영역)</h3>
+                  {['신체적', '사회적 / 감정적', '정신적', '영적'].map(area => (
+                    <div key={area} className="space-y-1">
+                      <div className="text-xs font-semibold text-stone-600">{area}</div>
+                      <input 
+                        type="text" 
+                        placeholder="이번 주 이 영역에서 실천할 한 가지..." 
+                        className="w-full border border-stone-200 dark:border-stone-700 rounded px-2.5 py-1.5 text-xs bg-transparent outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-4">
+                  <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">ROLES & BIG ROCKS</span>
+                  <h3 className="text-sm font-bold font-serif">역할별 Big Rock</h3>
+                  {['하나님의 자녀', '남편', '아빠', '목사', '선생님'].map(role => (
+                    <div key={role} className="space-y-1">
+                      <div className="text-xs font-semibold text-stone-600">{role}</div>
+                      <input 
+                        type="text" 
+                        placeholder="이번 주 이 역할에서 가장 중요한 일..." 
+                        className="w-full border border-stone-200 dark:border-stone-700 rounded px-2.5 py-1.5 text-xs bg-transparent outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 6. REVIEW */}
+          {view === 'review' && (
+            <div className="max-w-5xl mx-auto space-y-6">
+              <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider text-stone-600">Review</div>
+                  <h1 className="text-3xl font-serif font-bold tracking-tight">주간 Review</h1>
+                  <p className="text-xs text-stone-500 mt-1">2026년 11.9 월요일 ~ 11.15 주일</p>
+                </div>
+                <div className="flex space-x-1 border border-stone-300 dark:border-stone-700 rounded p-0.5 text-xs">
+                  <button onClick={() => setReviewTab('weekly')} className={reviewTab === 'weekly' ? 'px-2.5 py-1 rounded bg-[#2C3A4E] text-white' : 'px-2.5 py-1 rounded'}>주간</button>
+                  <button onClick={() => setReviewTab('monthly')} className={reviewTab === 'monthly' ? 'px-2.5 py-1 rounded bg-[#2C3A4E] text-white' : 'px-2.5 py-1 rounded'}>월간</button>
+                  <button onClick={() => setReviewTab('yearly')} className={reviewTab === 'yearly' ? 'px-2.5 py-1 rounded bg-[#2C3A4E] text-white' : 'px-2.5 py-1 rounded'}>연간</button>
+                </div>
+              </div>
+
+              <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-6 shadow-xs space-y-5">
+                <div className="flex items-center space-x-2">
+                  <span className="text-[#2C3A4E] font-serif font-bold text-xs uppercase tracking-wider">CORAM DEO</span>
+                  <h2 className="text-base font-bold font-serif">돌아보고 다시 정렬하기</h2>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold block mb-1">이번 주에 의미 있게 이룬 것은 무엇인가요?</label>
+                    <textarea 
+                      rows={2} 
+                      className="w-full border border-stone-200 dark:border-stone-700 rounded p-2 text-xs bg-transparent outline-none resize-none"
+                      placeholder="감사하고 의미 있었던 일을 기록해 보세요..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold block mb-1">무엇을 놓쳤고, 삶의 균형은 어떠했나요?</label>
+                    <textarea 
+                      rows={2} 
+                      className="w-full border border-stone-200 dark:border-stone-700 rounded p-2 text-xs bg-transparent outline-none resize-none"
+                      placeholder="몸과 마음, 신앙과 일상의 균형을 돌아보세요..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold block mb-1">무엇을 계속하고, 수정하고, 내려놓을까요?</label>
+                    <textarea 
+                      rows={2} 
+                      className="w-full border border-stone-200 dark:border-stone-700 rounded p-2 text-xs bg-transparent outline-none resize-none"
+                      placeholder="다음 주의 방향을 생각해 보세요..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-3">
+                  <button className="px-4 py-1.5 bg-[#2C3A4E] text-white rounded text-xs">Review 마치기</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 7. WEEKLY TIMETABLE */}
+          {view === 'weekly' && (
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
+                <div className="text-[11px] uppercase tracking-wider text-stone-600">24-HOUR SCHEDULE</div>
+                <h1 className="text-3xl font-serif font-bold tracking-tight">Weekly</h1>
+                <p className="text-xs text-stone-500 mt-1">2026년 11.9 월요일 ~ 11.15 주일</p>
+              </div>
+
+              <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
+                <div className="grid grid-cols-8 gap-px bg-stone-200 dark:bg-stone-700 rounded overflow-hidden text-xs">
+                  <div className="bg-stone-100 dark:bg-stone-800 p-2 text-center font-bold">시간</div>
+                  {['11.9 월', '11.10 화', '11.11 수', '11.12 목', '11.13 금', '11.14 토', '11.15 주일'].map((d, i) => (
+                    <div key={d} className={i === 2 ? 'bg-stone-100 dark:bg-stone-800 p-2 text-center font-bold text-[#C24B40]' : 'bg-stone-100 dark:bg-stone-800 p-2 text-center font-bold'}>
+                      {d}
+                    </div>
+                  ))}
+                  {Array.from({ length: 14 }, (_, h) => (
+                    <React.Fragment key={h}>
+                      <div className="bg-white dark:bg-stone-900 p-2 text-center text-stone-400 font-mono text-[10px]">
+                        {String(h + 7).padStart(2, '0')}:00
+                      </div>
+                      {Array.from({ length: 7 }, (_, d) => (
+                        <div key={d} className="bg-white dark:bg-stone-900 p-2 border-t border-stone-100 dark:border-stone-800 min-h-[40px]">
+                          {h === 13 && d === 6 && (
+                            <div className="bg-[#2C3A4E] text-white p-1 rounded text-[10px]">40일 철야</div>
+                          )}
+                        </div>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </main>
+    </div>
+  );
+}

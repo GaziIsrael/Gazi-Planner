@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -20,7 +20,13 @@ import {
   FolderKanban,
   Users,
   SearchCode,
-  ArrowUpRight
+  PenTool,
+  Eraser,
+  Trash2,
+  Type,
+  Highlighter,
+  Undo2,
+  Hand
 } from 'lucide-react';
 
 export default function App() {
@@ -73,6 +79,18 @@ export default function App() {
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Apple Pencil, Palm Rejection & Undo States
+  const [noteMode, setNoteMode] = useState<'text' | 'draw'>('draw');
+  const [penColor, setPenColor] = useState('#2C3A4E');
+  const [penTool, setPenTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
+  const [penSize, setPenSize] = useState(2);
+  const [pencilOnly, setPencilOnly] = useState(true); // 팜 리젝션 기본 활성화
+  const [canUndo, setCanUndo] = useState(false);
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDrawingRef = useRef(false);
+  const historyRef = useRef<string[]>([]);
+
   // Foundation & Target States
   const [mosMission, setMosMission] = useState(() => localStorage.getItem('planbae_mos_mission') || '');
   const [reviewTab, setReviewTab] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
@@ -120,6 +138,152 @@ export default function App() {
     localStorage.setItem('planbae_year_dir', yearDirection);
   }, [yearDirection]);
 
+  // Load saved canvas drawing & initialize undo history
+  useEffect(() => {
+    if (view === 'daily' && noteMode === 'draw' && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      const savedDataUrl = localStorage.getItem('planbae_handwriting');
+      if (ctx) {
+        if (savedDataUrl) {
+          const img = new Image();
+          img.onload = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            if (historyRef.current.length === 0) {
+              historyRef.current = [savedDataUrl];
+            }
+          };
+          img.src = savedDataUrl;
+        } else if (historyRef.current.length === 0) {
+          historyRef.current = [canvas.toDataURL('image/png')];
+        }
+      }
+    }
+  }, [view, noteMode]);
+
+  const getCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // 팜 리젝션: Apple Pencil 전용 모드일 때 손가락 터치(touch) 차단
+    if (pencilOnly && e.pointerType === 'touch') {
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.setPointerCapture(e.pointerId);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    isDrawingRef.current = true;
+    const { x, y } = getCoordinates(e);
+    
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const pressure = e.pressure > 0 ? e.pressure : 0.5;
+
+    if (penTool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = 22;
+    } else if (penTool === 'highlighter') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.35)';
+      ctx.lineWidth = 14;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = isDark && penColor === '#2C3A4E' ? '#E5E5E5' : penColor;
+      ctx.lineWidth = Math.max(1, penSize * (pressure * 1.6));
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    if (pencilOnly && e.pointerType === 'touch') return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const { x, y } = getCoordinates(e);
+    if (penTool === 'pen') {
+      const pressure = e.pressure > 0 ? e.pressure : 0.5;
+      ctx.lineWidth = Math.max(1, penSize * (pressure * 1.6));
+    }
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      if (canvas.hasPointerCapture(e.pointerId)) {
+        canvas.releasePointerCapture(e.pointerId);
+      }
+      const dataUrl = canvas.toDataURL('image/png');
+      localStorage.setItem('planbae_handwriting', dataUrl);
+
+      // 실행 취소(Undo) 스택에 저장 (최대 30단계)
+      historyRef.current.push(dataUrl);
+      if (historyRef.current.length > 30) {
+        historyRef.current.shift();
+      }
+      setCanUndo(historyRef.current.length > 1);
+    }
+  };
+
+  // 실행 취소 (Undo) 함수
+  const handleUndo = () => {
+    if (historyRef.current.length <= 1 || !canvasRef.current) return;
+    
+    historyRef.current.pop();
+    const previousState = historyRef.current[historyRef.current.length - 1];
+    setCanUndo(historyRef.current.length > 1);
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (ctx && previousState) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        localStorage.setItem('planbae_handwriting', previousState);
+      };
+      img.src = previousState;
+    }
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const emptyUrl = canvas.toDataURL('image/png');
+      localStorage.setItem('planbae_handwriting', emptyUrl);
+      historyRef.current.push(emptyUrl);
+      setCanUndo(historyRef.current.length > 1);
+    }
+  };
+
   const handleAddQuickTask = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && quickInput.trim()) {
       const newTask = {
@@ -127,7 +291,7 @@ export default function App() {
         title: quickInput.trim(),
         status: 'not_started',
         priority: 'B',
-        date: '2026-11-11',
+        date: '2026-11-12',
         tag: 'Q1'
       };
       setTasks([...tasks, newTask]);
@@ -213,7 +377,6 @@ export default function App() {
           </div>
 
           <div className="space-y-6">
-            {/* Foundation */}
             <div>
               <div className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest px-2 mb-1.5">Foundation</div>
               <nav className="space-y-0.5">
@@ -234,7 +397,6 @@ export default function App() {
               </nav>
             </div>
 
-            {/* Planner */}
             <div>
               <div className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest px-2 mb-1.5">Planner</div>
               <nav className="space-y-0.5">
@@ -269,7 +431,6 @@ export default function App() {
               </nav>
             </div>
 
-            {/* Workspace (누락 메뉴 완전 복원) */}
             <div>
               <div className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest px-2 mb-1.5">Workspace</div>
               <nav className="space-y-0.5">
@@ -370,19 +531,20 @@ export default function App() {
                 <div>
                   <div className="text-[11px] uppercase tracking-wider text-stone-600">Daily / Today</div>
                   <div className="text-3xl font-serif font-bold tracking-tight mt-0.5">
-                    11월 11일 <span className="text-xl font-normal text-stone-600 font-sans">수요일</span>
+                    11월 12일 <span className="text-xl font-normal text-stone-600 font-sans">목요일</span>
                   </div>
                   <div className="text-xs text-stone-500 mt-1">오늘의 할 일과 일정을 정리하고, 하루를 기록하세요.</div>
                 </div>
                 <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
                   <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronLeft className="w-4 h-4" /></button>
-                  <span className="px-2 font-medium">날짜 선택 2026. 11. 11.</span>
+                  <span className="px-2 font-medium">날짜 선택 2026. 11. 12.</span>
                   <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronRight className="w-4 h-4" /></button>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-6">
+                  {/* Priorities */}
                   <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
                     <div className="flex items-center justify-between mb-4">
                       <div>
@@ -450,22 +612,148 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Notes */}
-                  <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
-                    <div className="flex items-center justify-between mb-3">
+                  {/* 03 · Notes (Palm Rejection & Undo 지원) */}
+                  <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
                       <div>
                         <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">03 · Notes</span>
                         <h2 className="text-base font-bold font-serif">자유 노트</h2>
                       </div>
-                      <span className="text-[11px] text-stone-500">자동 저장</span>
+                      
+                      <div className="flex items-center bg-[#ECE7DD] dark:bg-stone-800 p-0.5 rounded-md text-[11px]">
+                        <button 
+                          onClick={() => setNoteMode('draw')}
+                          className={noteMode === 'draw' ? 'flex items-center space-x-1 px-2 py-1 rounded bg-white dark:bg-stone-700 font-semibold shadow-xs' : 'flex items-center space-x-1 px-2 py-1 text-stone-500'}
+                        >
+                          <PenTool className="w-3 h-3" />
+                          <span>펜슬 필기</span>
+                        </button>
+                        <button 
+                          onClick={() => setNoteMode('text')}
+                          className={noteMode === 'text' ? 'flex items-center space-x-1 px-2 py-1 rounded bg-white dark:bg-stone-700 font-semibold shadow-xs' : 'flex items-center space-x-1 px-2 py-1 text-stone-500'}
+                        >
+                          <Type className="w-3 h-3" />
+                          <span>텍스트</span>
+                        </button>
+                      </div>
                     </div>
-                    <textarea 
-                      rows={5}
-                      value={dailyNote}
-                      onChange={(e) => setDailyNote(e.target.value)}
-                      placeholder="오늘 남겨두고 싶은 생각, 기도, 메모..."
-                      className="w-full bg-transparent outline-none text-xs leading-relaxed resize-none"
-                    />
+
+                    {noteMode === 'text' ? (
+                      <textarea 
+                        rows={7}
+                        value={dailyNote}
+                        onChange={(e) => setDailyNote(e.target.value)}
+                        placeholder="오늘 남겨두고 싶은 생각, 기도, 메모..."
+                        className="w-full bg-transparent outline-none text-xs leading-relaxed resize-none"
+                      />
+                    ) : (
+                      <div className="space-y-2">
+                        {/* Apple Pencil Toolbar */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-[#F6F3EB] dark:bg-stone-800/80 px-2.5 py-1.5 rounded border border-stone-200 dark:border-stone-700">
+                          <div className="flex items-center space-x-1">
+                            <button 
+                              onClick={() => setPenTool('pen')}
+                              className={penTool === 'pen' ? 'p-1.5 rounded bg-white dark:bg-stone-700 shadow-xs text-[#2C3A4E] dark:text-white' : 'p-1.5 text-stone-500'}
+                              title="만년필"
+                            >
+                              <PenTool className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => setPenTool('highlighter')}
+                              className={penTool === 'highlighter' ? 'p-1.5 rounded bg-white dark:bg-stone-700 shadow-xs text-amber-500' : 'p-1.5 text-stone-500'}
+                              title="형광펜"
+                            >
+                              <Highlighter className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => setPenTool('eraser')}
+                              className={penTool === 'eraser' ? 'p-1.5 rounded bg-white dark:bg-stone-700 shadow-xs text-rose-500' : 'p-1.5 text-stone-500'}
+                              title="지우개"
+                            >
+                              <Eraser className="w-3.5 h-3.5" />
+                            </button>
+                            
+                            <div className="h-3.5 w-px bg-stone-300 dark:bg-stone-600 mx-1"></div>
+
+                            {[
+                              { name: '네이비', hex: '#2C3A4E' },
+                              { name: '세피아', hex: '#5C4033' },
+                              { name: '레드', hex: '#C24B40' },
+                              { name: '그린', hex: '#2D6A4F' }
+                            ].map(c => (
+                              <button
+                                key={c.hex}
+                                onClick={() => { setPenTool('pen'); setPenColor(c.hex); }}
+                                className={`w-4 h-4 rounded-full border ${penColor === c.hex && penTool === 'pen' ? 'ring-2 ring-offset-1 ring-stone-400 scale-110' : 'border-stone-300'}`}
+                                style={{ backgroundColor: c.hex }}
+                                title={c.name}
+                              />
+                            ))}
+                          </div>
+
+                          {/* Right Controls: Palm Rejection Toggle + Undo + Clear */}
+                          <div className="flex items-center space-x-1.5">
+                            <button
+                              onClick={() => setPencilOnly(!pencilOnly)}
+                              className={`flex items-center space-x-1 px-2 py-1 rounded text-[10px] border transition-colors ${
+                                pencilOnly 
+                                  ? 'bg-[#2C3A4E] text-white border-[#2C3A4E]' 
+                                  : 'bg-white dark:bg-stone-700 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-600'
+                              }`}
+                              title={pencilOnly ? '팜 리젝션 ON (Apple Pencil만 인식)' : '손가락 터치/마우스 필기 허용'}
+                            >
+                              <Hand className="w-3 h-3" />
+                              <span>{pencilOnly ? '펜슬 전용' : '손 터치 허용'}</span>
+                            </button>
+
+                            <button 
+                              onClick={handleUndo}
+                              disabled={!canUndo}
+                              className={`p-1.5 rounded border ${
+                                canUndo 
+                                  ? 'bg-white dark:bg-stone-700 text-stone-700 dark:text-stone-200 border-stone-300 dark:border-stone-600 hover:bg-stone-100' 
+                                  : 'text-stone-300 dark:text-stone-600 border-transparent cursor-not-allowed'
+                              }`}
+                              title="실행 취소 (Undo)"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button 
+                              onClick={clearCanvas}
+                              className="p-1.5 text-stone-500 hover:text-rose-600"
+                              title="전체 지우기"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Apple Pencil Drawing Canvas */}
+                        <div 
+                          className="relative border border-stone-200 dark:border-stone-700 rounded overflow-hidden bg-[#FBF9F4] dark:bg-[#1E1E22]"
+                          style={{
+                            backgroundImage: 'radial-gradient(rgba(160, 150, 135, 0.35) 1px, transparent 1px)',
+                            backgroundSize: '18px 18px'
+                          }}
+                        >
+                          <canvas
+                            ref={canvasRef}
+                            width={800}
+                            height={480}
+                            onPointerDown={handlePointerDown}
+                            onPointerMove={handlePointerMove}
+                            onPointerUp={handlePointerUp}
+                            onPointerCancel={handlePointerUp}
+                            style={{ touchAction: 'none' }}
+                            className="w-full h-[240px] cursor-crosshair block"
+                          />
+                          <div className="absolute bottom-1.5 right-2 text-[10px] text-stone-400 pointer-events-none select-none">
+                            {pencilOnly ? '팜 리젝션 ON (Apple Pencil 전용)' : '터치·마우스 모드'} · 자동 저장
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -532,7 +820,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. PROJECTS (스크린샷 완벽 재현) */}
+          {/* 2. PROJECTS */}
           {view === 'projects' && (
             <div className="max-w-5xl mx-auto space-y-6">
               <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -597,7 +885,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 3. DELEGATED (위임한 일) */}
+          {/* 3. DELEGATED */}
           {view === 'delegated' && (
             <div className="max-w-5xl mx-auto space-y-6">
               <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -632,7 +920,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 4. NOTE SEARCH (노트 검색) */}
+          {/* 4. NOTE SEARCH */}
           {view === 'search' && (
             <div className="max-w-5xl mx-auto space-y-6">
               <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -657,7 +945,7 @@ export default function App() {
                 <div className="space-y-3 pt-2">
                   {dailyNote && dailyNote.includes(searchQuery) && (
                     <div className="p-3 bg-[#FAF6EE] dark:bg-stone-800 rounded border border-stone-200 dark:border-stone-700 text-xs">
-                      <div className="font-bold text-[#2C3A4E] dark:text-stone-200 mb-1">자유 노트 (11월 11일)</div>
+                      <div className="font-bold text-[#2C3A4E] dark:text-stone-200 mb-1">자유 노트</div>
                       <div className="text-stone-600 dark:text-stone-400">{dailyNote}</div>
                     </div>
                   )}
@@ -717,7 +1005,7 @@ export default function App() {
                 <div className="grid grid-cols-7 gap-px bg-stone-200 dark:bg-stone-700 border border-stone-200 dark:border-stone-700 rounded overflow-hidden text-xs">
                   {Array.from({ length: 35 }, (_, idx) => {
                     const dayNum = idx + 1;
-                    const isToday = dayNum === 11;
+                    const isToday = dayNum === 12;
                     const cellBg = isToday ? 'bg-[#FAF6EE] dark:bg-stone-800 font-bold' : 'bg-white dark:bg-[#202024] hover:bg-stone-50';
                     return (
                       <div key={idx} className={"h-24 p-1.5 flex flex-col justify-between transition-colors " + cellBg}>
@@ -797,7 +1085,7 @@ export default function App() {
                     <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">YEAR AT A GLANCE</span>
                     <h2 className="text-base font-bold font-serif">한눈에 보는 한해</h2>
                   </div>
-                  <div className="text-xs text-stone-500">총 365일 · 지나온 날 315일 · 남은 날 50일</div>
+                  <div className="text-xs text-stone-500">총 365일 · 지나온 날 316일 · 남은 날 49일</div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -819,7 +1107,7 @@ export default function App() {
                         {Array.from({ length: 31 }, (_, d) => (
                           <span 
                             key={d} 
-                            className={mIdx === 10 && d === 10 ? 'py-0.5 rounded bg-[#2C3A4E] text-white font-bold' : 'py-0.5 rounded text-stone-600 dark:text-stone-400'}
+                            className={mIdx === 10 && d === 11 ? 'py-0.5 rounded bg-[#2C3A4E] text-white font-bold' : 'py-0.5 rounded text-stone-600 dark:text-stone-400'}
                           >
                             {d + 1}
                           </span>
@@ -989,7 +1277,7 @@ export default function App() {
                 <div className="grid grid-cols-8 gap-px bg-stone-200 dark:bg-stone-700 rounded overflow-hidden text-xs">
                   <div className="bg-stone-100 dark:bg-stone-800 p-2 text-center font-bold">시간</div>
                   {['11.9 월', '11.10 화', '11.11 수', '11.12 목', '11.13 금', '11.14 토', '11.15 주일'].map((d, i) => (
-                    <div key={d} className={i === 2 ? 'bg-stone-100 dark:bg-stone-800 p-2 text-center font-bold text-[#C24B40]' : 'bg-stone-100 dark:bg-stone-800 p-2 text-center font-bold'}>
+                    <div key={d} className={i === 3 ? 'bg-stone-100 dark:bg-stone-800 p-2 text-center font-bold text-[#C24B40]' : 'bg-stone-100 dark:bg-stone-800 p-2 text-center font-bold'}>
                       {d}
                     </div>
                   ))}

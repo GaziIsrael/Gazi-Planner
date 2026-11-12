@@ -84,7 +84,7 @@ export default function App() {
   const [penColor, setPenColor] = useState('#2C3A4E');
   const [penTool, setPenTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
   const [penSize, setPenSize] = useState(2.2);
-  const [pencilOnly, setPencilOnly] = useState(true);
+  const [pencilOnly, setPencilOnly] = useState(true); // true: 손가락=스크롤, 펜슬/마우스=필기
   const [canUndo, setCanUndo] = useState(false);
 
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -179,7 +179,11 @@ export default function App() {
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawMode) return;
-    if (pencilOnly && e.pointerType === 'touch') return;
+    
+    // 핵심: pencilOnly가 켜져 있으면 손가락(touch) 이벤트는 그리지 않고 브라우저의 기본 상하 스크롤(pan-y)로 넘김
+    if (pencilOnly && e.pointerType === 'touch') {
+      return;
+    }
 
     const canvas = pageCanvasRef.current;
     if (!canvas) return;
@@ -497,7 +501,7 @@ export default function App() {
       {/* MAIN CONTAINER */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         
-        {/* Top Header with Full-Page Pencil Mode Switch */}
+        {/* Top Header */}
         <header className="h-14 border-b border-[#E6E1D6] dark:border-[#3A3A40] flex items-center justify-between px-6 shrink-0 z-30 bg-[#FBF9F4] dark:bg-[#1E1E22]">
           <div className="text-xs tracking-wider text-stone-600 uppercase font-sans">
             {view === 'projects' ? 'WORKSPACE / 프로젝트' : 
@@ -508,7 +512,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-2">
-            {/* Master Toggle: Click/Type vs Full-Page Apple Pencil Mode */}
             <div className="flex items-center bg-[#ECE7DD] dark:bg-stone-800 p-0.5 rounded-md text-xs">
               <button
                 onClick={() => setIsDrawMode(false)}
@@ -537,7 +540,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Floating Apple Pencil Toolbar (Appears when Full-Page Pencil Mode is active) */}
+        {/* Floating Apple Pencil Toolbar */}
         {isDrawMode && (
           <div className="bg-[#F6F3EB] dark:bg-[#26262B] border-b border-[#E6E1D6] dark:border-[#3A3A40] px-6 py-2 flex flex-wrap items-center justify-between gap-2 z-30 shadow-xs">
             <div className="flex items-center space-x-2">
@@ -591,9 +594,10 @@ export default function App() {
                     ? 'bg-[#2C3A4E] text-white border-[#2C3A4E]' 
                     : 'bg-white dark:bg-stone-700 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-600'
                 }`}
+                title="손가락으로 상하 스크롤하면서 Apple Pencil로만 필기합니다."
               >
                 <Hand className="w-3.5 h-3.5" />
-                <span>{pencilOnly ? '팜 리젝션 ON (펜슬만)' : '손·마우스 필기 허용'}</span>
+                <span>{pencilOnly ? '손 스크롤 + 펜슬 필기 ON' : '손가락 터치 필기 허용'}</span>
               </button>
 
               <button 
@@ -621,10 +625,10 @@ export default function App() {
         )}
 
         {/* Scrollable Content + Transparent Full-Page Handwriting Canvas */}
-        <div className="flex-1 overflow-y-auto relative">
+        <div className="flex-1 overflow-y-auto relative" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="relative min-h-[1400px] p-8">
 
-            {/* TRANSPARENT FULL-PAGE INK OVERLAY (Covers Tasks, Schedule, Notes, Calendar!) */}
+            {/* TRANSPARENT FULL-PAGE INK OVERLAY: touchAction='pan-y' allows finger vertical scrolling while Apple Pencil draws! */}
             <canvas
               ref={pageCanvasRef}
               width={1600}
@@ -634,7 +638,7 @@ export default function App() {
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
               style={{ 
-                touchAction: isDrawMode ? 'none' : 'auto',
+                touchAction: isDrawMode ? (pencilOnly ? 'pan-y' : 'none') : 'auto',
                 pointerEvents: isDrawMode ? 'auto' : 'none'
               }}
               className={`absolute inset-0 w-full h-full z-20 ${isDrawMode ? 'cursor-crosshair' : ''}`}
@@ -649,7 +653,7 @@ export default function App() {
                     <div className="text-3xl font-serif font-bold tracking-tight mt-0.5">
                       11월 12일 <span className="text-xl font-normal text-stone-600 font-sans">목요일</span>
                     </div>
-                    <div className="text-xs text-stone-500 mt-1">상단 [화면 전체 펜슬 필기]를 누르면 할 일·시간표·노트 어디든 직접 필기할 수 있습니다.</div>
+                    <div className="text-xs text-stone-500 mt-1">펜슬로 글씨를 쓰면서 손가락으로 화면을 위아래로 자유롭게 움직일 수 있습니다.</div>
                   </div>
                   <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
                     <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronLeft className="w-4 h-4" /></button>
@@ -722,7 +726,6 @@ export default function App() {
                                   )}
                                 </div>
                               ))}
-                              {/* Blank lines for handwriting extra tasks directly with Apple Pencil */}
                               <div className="h-6 border-b border-dashed border-stone-200/70 dark:border-stone-800/70"></div>
                               <div className="h-6 border-b border-dashed border-stone-200/70 dark:border-stone-800/70"></div>
                             </div>
@@ -744,7 +747,7 @@ export default function App() {
                         rows={10}
                         value={dailyNote}
                         onChange={(e) => setDailyNote(e.target.value)}
-                        placeholder="키보드로 타이핑하거나, [화면 전체 펜슬 필기] 버튼을 켜고 Apple Pencil로 자유롭게 필기하세요..."
+                        placeholder="키보드로 타이핑하거나, Apple Pencil로 자유롭게 필기하세요..."
                         style={{
                           backgroundImage: 'radial-gradient(rgba(160, 150, 135, 0.35) 1px, transparent 1px)',
                           backgroundSize: '18px 18px'

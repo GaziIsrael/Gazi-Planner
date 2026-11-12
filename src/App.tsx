@@ -24,9 +24,7 @@ import {
   Eraser,
   Trash2,
   Highlighter,
-  Undo2,
-  Hand,
-  MousePointer
+  Undo2
 } from 'lucide-react';
 
 export default function App() {
@@ -89,15 +87,15 @@ export default function App() {
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Full-Page Apple Pencil Overlay States
-  const [isDrawMode, setIsDrawMode] = useState(false);
+  // Auto Apple Pencil Detection States (No Mode Switch Needed)
+  const [showPencilBar, setShowPencilBar] = useState(false);
   const [penColor, setPenColor] = useState('#2C3A4E');
   const [penTool, setPenTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
   const [penSize, setPenSize] = useState(2.2);
-  const [pencilOnly, setPencilOnly] = useState(true); // true: 손가락=스크롤 전용, 펜슬/마우스=필기 전용
   const [canUndo, setCanUndo] = useState(false);
 
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const isDrawingRef = useRef(false);
   const historyRef = useRef<string[]>([]);
 
@@ -107,7 +105,6 @@ export default function App() {
   const [monthGoal, setMonthGoal] = useState(() => localStorage.getItem('planbae_month_goal') || '10킬로 그램 감량');
   const [yearDirection, setYearDirection] = useState(() => localStorage.getItem('planbae_year_dir') || '');
 
-  // Helper: Format selectedDate for Korean Display
   const formatKoreanDateHeader = (dateStr: string) => {
     const [y, m, d] = dateStr.split('-').map(Number);
     const dateObj = new Date(y, m - 1, d);
@@ -126,7 +123,6 @@ export default function App() {
     setSelectedDate(nextStr);
   };
 
-  // Current Ink Storage Key (Separates ink by view AND date!)
   const getInkStorageKey = () => {
     if (view === 'daily') return `planbae_ink_daily_${selectedDate}`;
     if (view === 'monthly') return `planbae_ink_monthly_${selectedDate.slice(0, 7)}`;
@@ -175,45 +171,6 @@ export default function App() {
     localStorage.setItem('planbae_year_dir', yearDirection);
   }, [yearDirection]);
 
-  // iPadOS Safari: Block page scroll ONLY when Apple Pencil touches the canvas; allow finger touches to scroll
-  useEffect(() => {
-    const canvas = pageCanvasRef.current;
-    if (!canvas) return;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (!isDrawMode) return;
-      const touch = e.touches[0] as any;
-      // If pencilOnly is ON: block scroll when stylus touches, allow scroll when finger ('direct') touches
-      if (pencilOnly) {
-        if (touch && touch.touchType === 'stylus') {
-          e.preventDefault();
-        }
-      } else {
-        e.preventDefault();
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isDrawMode) return;
-      const touch = e.touches[0] as any;
-      if (pencilOnly) {
-        if (touch && touch.touchType === 'stylus') {
-          e.preventDefault();
-        }
-      } else {
-        e.preventDefault();
-      }
-    };
-
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-
-    return () => {
-      canvas.removeEventListener('touchstart', handleTouchStart);
-      canvas.removeEventListener('touchmove', handleTouchMove);
-    };
-  }, [isDrawMode, pencilOnly]);
-
   // Load saved full-page handwriting whenever view OR selectedDate changes
   useEffect(() => {
     const canvas = pageCanvasRef.current;
@@ -241,82 +198,69 @@ export default function App() {
     }
   }, [view, selectedDate]);
 
-  const getCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  // AUTO APPLE PENCIL DETECTION ENGINE (Works without any mode toggle button!)
+  useEffect(() => {
+    const container = containerRef.current;
     const canvas = pageCanvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY
+    if (!container || !canvas) return;
+
+    const getCanvasCoords = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
     };
-  };
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawMode) return;
-    
-    // If pencilOnly is ON, ignore finger touches so fingers only scroll/pan the page
-    if (pencilOnly && e.pointerType === 'touch') {
-      return;
-    }
+    const startStroke = (clientX: number, clientY: number, force = 0.5) => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    const canvas = pageCanvasRef.current;
-    if (!canvas) return;
-    canvas.setPointerCapture(e.pointerId);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+      isDrawingRef.current = true;
+      setShowPencilBar(true);
 
-    isDrawingRef.current = true;
-    const { x, y } = getCoordinates(e);
-    
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+      const { x, y } = getCanvasCoords(clientX, clientY);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-    const pressure = e.pressure > 0 ? e.pressure : 0.5;
+      const pressure = force > 0 ? force : 0.5;
 
-    if (penTool === 'eraser') {
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = 30;
-    } else if (penTool === 'highlighter') {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = 'rgba(250, 204, 21, 0.35)';
-      ctx.lineWidth = 18;
-    } else {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = isDark && penColor === '#2C3A4E' ? '#E5E5E5' : penColor;
-      ctx.lineWidth = Math.max(1.5, penSize * (pressure * 1.8));
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current || !isDrawMode) return;
-    if (pencilOnly && e.pointerType === 'touch') return;
-
-    const canvas = pageCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const { x, y } = getCoordinates(e);
-    if (penTool === 'pen') {
-      const pressure = e.pressure > 0 ? e.pressure : 0.5;
-      ctx.lineWidth = Math.max(1.5, penSize * (pressure * 1.8));
-    }
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
-    isDrawingRef.current = false;
-    const canvas = pageCanvasRef.current;
-    if (canvas) {
-      if (canvas.hasPointerCapture(e.pointerId)) {
-        canvas.releasePointerCapture(e.pointerId);
+      if (penTool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineWidth = 30;
+      } else if (penTool === 'highlighter') {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.35)';
+        ctx.lineWidth = 18;
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = isDark && penColor === '#2C3A4E' ? '#E5E5E5' : penColor;
+        ctx.lineWidth = Math.max(1.5, penSize * (pressure * 1.8));
       }
+    };
+
+    const moveStroke = (clientX: number, clientY: number, force = 0.5) => {
+      if (!isDrawingRef.current) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const { x, y } = getCanvasCoords(clientX, clientY);
+      if (penTool === 'pen') {
+        const pressure = force > 0 ? force : 0.5;
+        ctx.lineWidth = Math.max(1.5, penSize * (pressure * 1.8));
+      }
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    };
+
+    const endStroke = () => {
+      if (!isDrawingRef.current) return;
+      isDrawingRef.current = false;
+
       const dataUrl = canvas.toDataURL('image/png');
       localStorage.setItem(getInkStorageKey(), dataUrl);
 
@@ -325,8 +269,72 @@ export default function App() {
         historyRef.current.shift();
       }
       setCanUndo(historyRef.current.length > 1);
-    }
-  };
+    };
+
+    // iPadOS Safari Touch Events: Detect Apple Pencil ('stylus') vs Finger ('direct')
+    const onTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0] as any;
+      if (touch && touch.touchType === 'stylus') {
+        // Apple Pencil touched the screen! Prevent scroll and start writing immediately
+        e.preventDefault();
+        startStroke(touch.clientX, touch.clientY, touch.force);
+      }
+      // If finger ('direct'), do nothing -> browser scrolls and clicks buttons normally!
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0] as any;
+      if (touch && touch.touchType === 'stylus') {
+        e.preventDefault();
+        moveStroke(touch.clientX, touch.clientY, touch.force);
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (isDrawingRef.current) {
+        endStroke();
+      }
+    };
+
+    // Pointer Events fallback for stylus on other browsers
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'pen' && !isDrawingRef.current) {
+        e.preventDefault();
+        startStroke(e.clientX, e.clientY, e.pressure);
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType === 'pen' && isDrawingRef.current) {
+        e.preventDefault();
+        moveStroke(e.clientX, e.clientY, e.pressure);
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerType === 'pen' && isDrawingRef.current) {
+        endStroke();
+      }
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd);
+    container.addEventListener('touchcancel', onTouchEnd);
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('pointermove', onPointerMove);
+    container.addEventListener('pointerup', onPointerUp);
+
+    return () => {
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('touchcancel', onTouchEnd);
+      container.removeEventListener('pointerdown', onPointerDown);
+      container.removeEventListener('pointermove', onPointerMove);
+      container.removeEventListener('pointerup', onPointerUp);
+    };
+  }, [view, selectedDate, penTool, penColor, penSize, isDark]);
 
   const handleUndo = () => {
     if (historyRef.current.length <= 1 || !pageCanvasRef.current) return;
@@ -591,22 +599,18 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-2">
-            <div className="flex items-center bg-[#ECE7DD] dark:bg-stone-800 p-0.5 rounded-md text-xs">
-              <button
-                onClick={() => setIsDrawMode(false)}
-                className={!isDrawMode ? 'flex items-center space-x-1.5 px-2.5 py-1 rounded bg-white dark:bg-stone-700 font-semibold text-[#2C3A4E] dark:text-white shadow-xs' : 'flex items-center space-x-1.5 px-2.5 py-1 text-stone-500'}
-              >
-                <MousePointer className="w-3.5 h-3.5" />
-                <span>클릭·입력</span>
-              </button>
-              <button
-                onClick={() => setIsDrawMode(true)}
-                className={isDrawMode ? 'flex items-center space-x-1.5 px-2.5 py-1 rounded bg-[#2C3A4E] text-white font-semibold shadow-xs' : 'flex items-center space-x-1.5 px-2.5 py-1 text-stone-500'}
-              >
-                <PenTool className="w-3.5 h-3.5" />
-                <span>화면 전체 펜슬 필기</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setShowPencilBar(!showPencilBar)}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs border transition-colors ${
+                showPencilBar 
+                  ? 'bg-[#2C3A4E] text-white border-[#2C3A4E]' 
+                  : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-700'
+              }`}
+              title="Apple Pencil을 화면에 대면 자동 필기되며, 이 버튼으로 펜 색상·지우개 바를 열거나 닫습니다."
+            >
+              <PenTool className="w-3.5 h-3.5" />
+              <span>펜슬 도구</span>
+            </button>
 
             <div className="h-4 w-px bg-stone-300 dark:bg-stone-700 mx-1"></div>
             
@@ -623,11 +627,11 @@ export default function App() {
           </div>
         </header>
 
-        {/* Floating Apple Pencil Toolbar */}
-        {isDrawMode && (
+        {/* Auto-Revealed Apple Pencil Toolbar */}
+        {showPencilBar && (
           <div className="bg-[#F6F3EB] dark:bg-[#26262B] border-b border-[#E6E1D6] dark:border-[#3A3A40] px-6 py-2 flex flex-wrap items-center justify-between gap-2 z-30 shadow-xs">
             <div className="flex items-center space-x-2">
-              <span className="text-[11px] font-bold text-[#2C3A4E] dark:text-stone-300 mr-1">펜슬 도구:</span>
+              <span className="text-[11px] font-bold text-[#2C3A4E] dark:text-stone-300 mr-1">Apple Pencil 자동 인식 중:</span>
               
               <button 
                 onClick={() => setPenTool('pen')}
@@ -670,19 +674,6 @@ export default function App() {
             </div>
 
             <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setPencilOnly(!pencilOnly)}
-                className={`flex items-center space-x-1 px-2.5 py-1 rounded text-[11px] border ${
-                  pencilOnly 
-                    ? 'bg-[#2C3A4E] text-white border-[#2C3A4E]' 
-                    : 'bg-white dark:bg-stone-700 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-600'
-                }`}
-                title="펜슬로는 글씨만 써지고, 손가락으로만 화면이 스크롤됩니다."
-              >
-                <Hand className="w-3.5 h-3.5" />
-                <span>{pencilOnly ? '펜슬=필기 / 손가락=스크롤 고정' : '손가락 터치 필기 허용'}</span>
-              </button>
-
               <button 
                 onClick={handleUndo}
                 disabled={!canUndo}
@@ -703,31 +694,36 @@ export default function App() {
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>이 날짜 필기 지우기</span>
               </button>
+
+              <button 
+                onClick={() => setShowPencilBar(false)}
+                className="p-1 text-stone-400 hover:text-stone-700"
+                title="도구 바 숨기기 (펜슬을 대면 다시 나타남)"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
         )}
 
-        {/* Scrollable Content + Transparent Full-Page Handwriting Canvas */}
-        <div className="flex-1 overflow-y-auto relative" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {/* Scrollable Content + Automatic Apple Pencil Canvas */}
+        <div 
+          ref={containerRef}
+          className="flex-1 overflow-y-auto relative" 
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           <div className="relative min-h-[1400px] p-8">
 
-            {/* TRANSPARENT FULL-PAGE INK OVERLAY */}
+            {/* PASSIVE INK LAYER: pointerEvents='none' lets fingers click/scroll naturally, while container touchstart catches Apple Pencil! */}
             <canvas
               ref={pageCanvasRef}
               width={1600}
               height={2200}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
-              style={{ 
-                touchAction: isDrawMode ? (pencilOnly ? 'pan-y' : 'none') : 'auto',
-                pointerEvents: isDrawMode ? 'auto' : 'none'
-              }}
-              className={`absolute inset-0 w-full h-full z-20 ${isDrawMode ? 'cursor-crosshair' : ''}`}
+              style={{ pointerEvents: 'none' }}
+              className="absolute inset-0 w-full h-full z-20"
             />
 
-            {/* 1. DAILY VIEW (Date-Separated Tasks, Notes & Handwriting) */}
+            {/* 1. DAILY VIEW */}
             {view === 'daily' && (
               <div className="max-w-6xl mx-auto space-y-6 relative z-10">
                 <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -736,10 +732,9 @@ export default function App() {
                     <div className="text-3xl font-serif font-bold tracking-tight mt-0.5">
                       {dateDisplay.monthDay} <span className="text-xl font-normal text-stone-600 font-sans">{dateDisplay.weekday}</span>
                     </div>
-                    <div className="text-xs text-stone-500 mt-1">날짜별로 할 일, 자유 노트, 펜슬 필기가 각각 독립적으로 저장됩니다.</div>
+                    <div className="text-xs text-stone-500 mt-1">별도 버튼 없이 Apple Pencil을 화면에 대면 바로 써지고, 손가락으로는 화면 스크롤과 클릭이 됩니다.</div>
                   </div>
                   
-                  {/* Date Navigation Controls */}
                   <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
                     <button 
                       onClick={() => changeDateByDays(-1)}
@@ -838,7 +833,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* 03 · Notes (Date-separated) */}
+                    {/* 03 · Notes */}
                     <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
@@ -851,7 +846,7 @@ export default function App() {
                         rows={10}
                         value={currentDailyNote}
                         onChange={(e) => setNotesByDate({ ...notesByDate, [selectedDate]: e.target.value })}
-                        placeholder={`${dateDisplay.monthDay}의 생각, 기도, 메모를 적거나 Apple Pencil로 필기하세요...`}
+                        placeholder={`${dateDisplay.monthDay}의 생각, 기도, 메모를 적거나 Apple Pencil을 바로 대고 필기하세요...`}
                         style={{
                           backgroundImage: 'radial-gradient(rgba(160, 150, 135, 0.35) 1px, transparent 1px)',
                           backgroundSize: '18px 18px'

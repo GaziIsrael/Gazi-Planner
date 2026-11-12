@@ -35,7 +35,10 @@ export default function App() {
   const [appName, setAppName] = useState(() => localStorage.getItem('planbae_app_name') || 'Plan BAE');
   const [isEditingName, setIsEditingName] = useState(false);
 
-  // Daily Tasks
+  // Selected Date State (YYYY-MM-DD)
+  const [selectedDate, setSelectedDate] = useState('2026-11-12');
+
+  // Daily Tasks (Date-aware)
   const [tasks, setTasks] = useState(() => {
     const saved = localStorage.getItem('planbae_tasks');
     return saved ? JSON.parse(saved) : [
@@ -68,11 +71,18 @@ export default function App() {
   const [schedule, setSchedule] = useState(() => {
     const saved = localStorage.getItem('planbae_schedule');
     return saved ? JSON.parse(saved) : [
-      { id: 1, title: '40일 철야', start: '20:00', end: '22:40', tag: 'Pastoral', date: '2026-11-08' }
+      { id: 1, title: '40일 철야', start: '20:00', end: '22:40', tag: 'Pastoral', date: '2026-11-12' }
     ];
   });
 
-  const [dailyNote, setDailyNote] = useState(() => localStorage.getItem('planbae_note') || '');
+  // Date-specific Notes Map
+  const [notesByDate, setNotesByDate] = useState<{ [key: string]: string }>(() => {
+    const saved = localStorage.getItem('planbae_notes_by_date');
+    if (saved) return JSON.parse(saved);
+    const legacyNote = localStorage.getItem('planbae_note') || '';
+    return { '2026-11-12': legacyNote };
+  });
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showStatusMenu, setShowStatusMenu] = useState<number | null>(null);
   const [quickInput, setQuickInput] = useState('');
@@ -84,7 +94,7 @@ export default function App() {
   const [penColor, setPenColor] = useState('#2C3A4E');
   const [penTool, setPenTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen');
   const [penSize, setPenSize] = useState(2.2);
-  const [pencilOnly, setPencilOnly] = useState(true); // true: 손가락=스크롤, 펜슬/마우스=필기
+  const [pencilOnly, setPencilOnly] = useState(true); // true: 손가락=스크롤 전용, 펜슬/마우스=필기 전용
   const [canUndo, setCanUndo] = useState(false);
 
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -96,6 +106,33 @@ export default function App() {
   const [reviewTab, setReviewTab] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
   const [monthGoal, setMonthGoal] = useState(() => localStorage.getItem('planbae_month_goal') || '10킬로 그램 감량');
   const [yearDirection, setYearDirection] = useState(() => localStorage.getItem('planbae_year_dir') || '');
+
+  // Helper: Format selectedDate for Korean Display
+  const formatKoreanDateHeader = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+    return {
+      monthDay: `${m}월 ${d}일`,
+      weekday: days[dateObj.getDay()],
+      dotted: `${y}. ${String(m).padStart(2, '0')}. ${String(d).padStart(2, '0')}.`
+    };
+  };
+
+  const changeDateByDays = (delta: number) => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const next = new Date(y, m - 1, d + delta);
+    const nextStr = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+    setSelectedDate(nextStr);
+  };
+
+  // Current Ink Storage Key (Separates ink by view AND date!)
+  const getInkStorageKey = () => {
+    if (view === 'daily') return `planbae_ink_daily_${selectedDate}`;
+    if (view === 'monthly') return `planbae_ink_monthly_${selectedDate.slice(0, 7)}`;
+    if (view === 'yearly') return `planbae_ink_yearly_${selectedDate.slice(0, 4)}`;
+    return `planbae_ink_${view}`;
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 30000);
@@ -123,8 +160,8 @@ export default function App() {
   }, [schedule]);
 
   useEffect(() => {
-    localStorage.setItem('planbae_note', dailyNote);
-  }, [dailyNote]);
+    localStorage.setItem('planbae_notes_by_date', JSON.stringify(notesByDate));
+  }, [notesByDate]);
 
   useEffect(() => {
     localStorage.setItem('planbae_mos_mission', mosMission);
@@ -138,14 +175,53 @@ export default function App() {
     localStorage.setItem('planbae_year_dir', yearDirection);
   }, [yearDirection]);
 
-  // Load saved full-page handwriting per view
+  // iPadOS Safari: Block page scroll ONLY when Apple Pencil touches the canvas; allow finger touches to scroll
+  useEffect(() => {
+    const canvas = pageCanvasRef.current;
+    if (!canvas) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (!isDrawMode) return;
+      const touch = e.touches[0] as any;
+      // If pencilOnly is ON: block scroll when stylus touches, allow scroll when finger ('direct') touches
+      if (pencilOnly) {
+        if (touch && touch.touchType === 'stylus') {
+          e.preventDefault();
+        }
+      } else {
+        e.preventDefault();
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDrawMode) return;
+      const touch = e.touches[0] as any;
+      if (pencilOnly) {
+        if (touch && touch.touchType === 'stylus') {
+          e.preventDefault();
+        }
+      } else {
+        e.preventDefault();
+      }
+    };
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [isDrawMode, pencilOnly]);
+
+  // Load saved full-page handwriting whenever view OR selectedDate changes
   useEffect(() => {
     const canvas = pageCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const storageKey = `planbae_ink_${view}`;
+    const storageKey = getInkStorageKey();
     const savedDataUrl = localStorage.getItem(storageKey);
 
     ctx.globalCompositeOperation = 'source-over';
@@ -163,7 +239,7 @@ export default function App() {
       historyRef.current = [canvas.toDataURL('image/png')];
       setCanUndo(false);
     }
-  }, [view]);
+  }, [view, selectedDate]);
 
   const getCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = pageCanvasRef.current;
@@ -180,7 +256,7 @@ export default function App() {
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawMode) return;
     
-    // 핵심: pencilOnly가 켜져 있으면 손가락(touch) 이벤트는 그리지 않고 브라우저의 기본 상하 스크롤(pan-y)로 넘김
+    // If pencilOnly is ON, ignore finger touches so fingers only scroll/pan the page
     if (pencilOnly && e.pointerType === 'touch') {
       return;
     }
@@ -242,7 +318,7 @@ export default function App() {
         canvas.releasePointerCapture(e.pointerId);
       }
       const dataUrl = canvas.toDataURL('image/png');
-      localStorage.setItem(`planbae_ink_${view}`, dataUrl);
+      localStorage.setItem(getInkStorageKey(), dataUrl);
 
       historyRef.current.push(dataUrl);
       if (historyRef.current.length > 30) {
@@ -267,7 +343,7 @@ export default function App() {
         ctx.globalCompositeOperation = 'source-over';
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        localStorage.setItem(`planbae_ink_${view}`, previousState);
+        localStorage.setItem(getInkStorageKey(), previousState);
       };
       img.src = previousState;
     }
@@ -281,7 +357,7 @@ export default function App() {
       ctx.globalCompositeOperation = 'source-over';
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const emptyUrl = canvas.toDataURL('image/png');
-      localStorage.setItem(`planbae_ink_${view}`, emptyUrl);
+      localStorage.setItem(getInkStorageKey(), emptyUrl);
       historyRef.current.push(emptyUrl);
       setCanUndo(historyRef.current.length > 1);
     }
@@ -294,7 +370,7 @@ export default function App() {
         title: quickInput.trim(),
         status: 'not_started',
         priority: 'B',
-        date: '2026-11-12',
+        date: selectedDate,
         tag: 'Q1'
       };
       setTasks([...tasks, newTask]);
@@ -336,6 +412,9 @@ export default function App() {
 
   const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
   const formattedCurrentTime = currentTime.toTimeString().slice(0, 5);
+  const dateDisplay = formatKoreanDateHeader(selectedDate);
+  const dailyTasks = tasks.filter(t => t.date === selectedDate);
+  const currentDailyNote = notesByDate[selectedDate] || '';
 
   return (
     <div className="flex h-screen w-full overflow-hidden text-sm bg-[#FBF9F4] text-[#333333] dark:bg-[#1E1E22] dark:text-[#E0E0E0] font-sans antialiased">
@@ -532,7 +611,11 @@ export default function App() {
             <div className="h-4 w-px bg-stone-300 dark:bg-stone-700 mx-1"></div>
             
             <button 
-              onClick={() => { setView('daily'); setCurrentTime(new Date()); }} 
+              onClick={() => { 
+                setView('daily'); 
+                setSelectedDate('2026-11-12');
+                setCurrentTime(new Date()); 
+              }} 
               className="px-2.5 py-1 text-xs border border-stone-300 dark:border-stone-700 rounded bg-white dark:bg-stone-800 hover:bg-stone-50"
             >
               오늘
@@ -594,10 +677,10 @@ export default function App() {
                     ? 'bg-[#2C3A4E] text-white border-[#2C3A4E]' 
                     : 'bg-white dark:bg-stone-700 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-600'
                 }`}
-                title="손가락으로 상하 스크롤하면서 Apple Pencil로만 필기합니다."
+                title="펜슬로는 글씨만 써지고, 손가락으로만 화면이 스크롤됩니다."
               >
                 <Hand className="w-3.5 h-3.5" />
-                <span>{pencilOnly ? '손 스크롤 + 펜슬 필기 ON' : '손가락 터치 필기 허용'}</span>
+                <span>{pencilOnly ? '펜슬=필기 / 손가락=스크롤 고정' : '손가락 터치 필기 허용'}</span>
               </button>
 
               <button 
@@ -618,7 +701,7 @@ export default function App() {
                 className="flex items-center space-x-1 px-2 py-1 text-[11px] text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>페이지 지우기</span>
+                <span>이 날짜 필기 지우기</span>
               </button>
             </div>
           </div>
@@ -628,7 +711,7 @@ export default function App() {
         <div className="flex-1 overflow-y-auto relative" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="relative min-h-[1400px] p-8">
 
-            {/* TRANSPARENT FULL-PAGE INK OVERLAY: touchAction='pan-y' allows finger vertical scrolling while Apple Pencil draws! */}
+            {/* TRANSPARENT FULL-PAGE INK OVERLAY */}
             <canvas
               ref={pageCanvasRef}
               width={1600}
@@ -644,21 +727,40 @@ export default function App() {
               className={`absolute inset-0 w-full h-full z-20 ${isDrawMode ? 'cursor-crosshair' : ''}`}
             />
 
-            {/* 1. DAILY VIEW */}
+            {/* 1. DAILY VIEW (Date-Separated Tasks, Notes & Handwriting) */}
             {view === 'daily' && (
               <div className="max-w-6xl mx-auto space-y-6 relative z-10">
                 <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
                   <div>
-                    <div className="text-[11px] uppercase tracking-wider text-stone-600">Daily / Today</div>
+                    <div className="text-[11px] uppercase tracking-wider text-stone-600">Daily / {selectedDate}</div>
                     <div className="text-3xl font-serif font-bold tracking-tight mt-0.5">
-                      11월 12일 <span className="text-xl font-normal text-stone-600 font-sans">목요일</span>
+                      {dateDisplay.monthDay} <span className="text-xl font-normal text-stone-600 font-sans">{dateDisplay.weekday}</span>
                     </div>
-                    <div className="text-xs text-stone-500 mt-1">펜슬로 글씨를 쓰면서 손가락으로 화면을 위아래로 자유롭게 움직일 수 있습니다.</div>
+                    <div className="text-xs text-stone-500 mt-1">날짜별로 할 일, 자유 노트, 펜슬 필기가 각각 독립적으로 저장됩니다.</div>
                   </div>
+                  
+                  {/* Date Navigation Controls */}
                   <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
-                    <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronLeft className="w-4 h-4" /></button>
-                    <span className="px-2 font-medium">날짜 선택 2026. 11. 12.</span>
-                    <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronRight className="w-4 h-4" /></button>
+                    <button 
+                      onClick={() => changeDateByDays(-1)}
+                      className="p-1.5 text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-700 rounded"
+                      title="이전 날짜"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <input 
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                      className="px-2 py-0.5 font-medium bg-transparent outline-none text-xs cursor-pointer"
+                    />
+                    <button 
+                      onClick={() => changeDateByDays(1)}
+                      className="p-1.5 text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-700 rounded"
+                      title="다음 날짜"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -671,13 +773,15 @@ export default function App() {
                           <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">01 · Priorities</span>
                           <h2 className="text-base font-bold font-serif">오늘 할 일</h2>
                         </div>
-                        <span className="text-xs text-stone-600">0 / 4 완료</span>
+                        <span className="text-xs text-stone-600">
+                          {dailyTasks.filter(t => t.status === 'completed').length} / {dailyTasks.length} 완료
+                        </span>
                       </div>
 
                       <div className="flex items-center space-x-2 mb-4">
                         <input 
                           type="text" 
-                          placeholder="오늘 할 일 적기... (Enter를 누르면 추가)"
+                          placeholder={`${dateDisplay.monthDay} 할 일 적기... (Enter로 추가)`}
                           value={quickInput}
                           onChange={(e) => setQuickInput(e.target.value)}
                           onKeyDown={handleAddQuickTask}
@@ -702,7 +806,7 @@ export default function App() {
                               <button className="text-stone-500 hover:text-stone-800"><Plus className="w-3.5 h-3.5" /></button>
                             </div>
                             <div className="space-y-2.5">
-                              {tasks.filter(t => t.priority === p).map(task => (
+                              {dailyTasks.filter(t => t.priority === p).map(task => (
                                 <div key={task.id} className="relative flex items-center justify-between py-1.5 border-b border-dashed border-stone-200 dark:border-stone-800 text-xs">
                                   <div className="flex items-center space-x-2.5">
                                     <button onClick={() => setShowStatusMenu(showStatusMenu === task.id ? null : task.id)}>
@@ -734,20 +838,20 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* 03 · Notes */}
+                    {/* 03 · Notes (Date-separated) */}
                     <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">03 · Notes</span>
+                          <span className="text-[11px] font-semibold text-stone-600 uppercase tracking-widest block">03 · Notes ({dateDisplay.monthDay})</span>
                           <h2 className="text-base font-bold font-serif">자유 노트</h2>
                         </div>
-                        <span className="text-[11px] text-stone-500">타이핑 & 펜슬 필기 겸용</span>
+                        <span className="text-[11px] text-stone-500">날짜별 자동 저장</span>
                       </div>
                       <textarea 
                         rows={10}
-                        value={dailyNote}
-                        onChange={(e) => setDailyNote(e.target.value)}
-                        placeholder="키보드로 타이핑하거나, Apple Pencil로 자유롭게 필기하세요..."
+                        value={currentDailyNote}
+                        onChange={(e) => setNotesByDate({ ...notesByDate, [selectedDate]: e.target.value })}
+                        placeholder={`${dateDisplay.monthDay}의 생각, 기도, 메모를 적거나 Apple Pencil로 필기하세요...`}
                         style={{
                           backgroundImage: 'radial-gradient(rgba(160, 150, 135, 0.35) 1px, transparent 1px)',
                           backgroundSize: '18px 18px'
@@ -791,7 +895,7 @@ export default function App() {
                           </div>
                         ))}
 
-                        {schedule.map(evt => {
+                        {schedule.filter(evt => evt.date === selectedDate).map(evt => {
                           const [startH, startM] = evt.start.split(':').map(Number);
                           const [endH, endM] = evt.end.split(':').map(Number);
                           const startMins = startH * 60 + startM;
@@ -926,7 +1030,7 @@ export default function App() {
                 <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
                   <div className="text-[11px] uppercase tracking-wider text-stone-600">SEARCH</div>
                   <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">노트 검색</h1>
-                  <p className="text-xs text-stone-500 mt-1">자유 노트, 사명 선언서, 플래너에 적힌 모든 기록을 검색합니다.</p>
+                  <p className="text-xs text-stone-500 mt-1">모든 날짜의 자유 노트와 사명 선언서를 통합 검색합니다.</p>
                 </div>
 
                 <div className="relative">
@@ -943,21 +1047,22 @@ export default function App() {
                 <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-3">
                   <div className="text-xs font-semibold text-stone-600">검색 결과</div>
                   <div className="space-y-3 pt-2">
-                    {dailyNote && dailyNote.includes(searchQuery) && (
-                      <div className="p-3 bg-[#FAF6EE] dark:bg-stone-800 rounded border border-stone-200 dark:border-stone-700 text-xs">
-                        <div className="font-bold text-[#2C3A4E] dark:text-stone-200 mb-1">자유 노트</div>
-                        <div className="text-stone-600 dark:text-stone-400">{dailyNote}</div>
-                      </div>
-                    )}
+                    {Object.entries(notesByDate).map(([dateKey, text]) => (
+                      text && text.includes(searchQuery) ? (
+                        <div 
+                          key={dateKey} 
+                          onClick={() => { setSelectedDate(dateKey); setView('daily'); }}
+                          className="p-3 bg-[#FAF6EE] dark:bg-stone-800 rounded border border-stone-200 dark:border-stone-700 text-xs cursor-pointer hover:border-[#2C3A4E]"
+                        >
+                          <div className="font-bold text-[#2C3A4E] dark:text-stone-200 mb-1">자유 노트 ({dateKey})</div>
+                          <div className="text-stone-600 dark:text-stone-400">{text}</div>
+                        </div>
+                      ) : null
+                    ))}
                     {mosMission && mosMission.includes(searchQuery) && (
                       <div className="p-3 bg-[#FAF6EE] dark:bg-stone-800 rounded border border-stone-200 dark:border-stone-700 text-xs">
                         <div className="font-bold text-[#2C3A4E] dark:text-stone-200 mb-1">M · 사명 선언서</div>
                         <div className="text-stone-600 dark:text-stone-400">{mosMission}</div>
-                      </div>
-                    )}
-                    {(!dailyNote.includes(searchQuery) && !mosMission.includes(searchQuery)) && (
-                      <div className="text-xs text-stone-400 py-6 text-center">
-                        일치하는 노트 기록이 없습니다.
                       </div>
                     )}
                   </div>
@@ -972,7 +1077,7 @@ export default function App() {
                   <div>
                     <div className="text-[11px] uppercase tracking-wider text-stone-600">MONTHLY</div>
                     <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">2026년 11월</h1>
-                    <p className="text-xs text-stone-500 mt-1">달력 칸 위에도 Apple Pencil로 직접 손글씨 일정을 적을 수 있습니다.</p>
+                    <p className="text-xs text-stone-500 mt-1">날짜 숫자를 누르면 해당 날짜의 Daily 화면과 필기 노트로 바로 이동합니다.</p>
                   </div>
                   <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
                     <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronLeft className="w-4 h-4" /></button>
@@ -997,17 +1102,30 @@ export default function App() {
                   <div className="grid grid-cols-7 gap-px bg-stone-200 dark:bg-stone-700 border border-stone-200 dark:border-stone-700 rounded overflow-hidden text-xs">
                     {Array.from({ length: 35 }, (_, idx) => {
                       const dayNum = idx + 1;
-                      const isToday = dayNum === 12;
-                      const cellBg = isToday ? 'bg-[#FAF6EE] dark:bg-stone-800 font-bold' : 'bg-white dark:bg-[#202024]';
+                      const isCurrentMonth = dayNum <= 30;
+                      const formattedDayStr = isCurrentMonth ? `2026-11-${String(dayNum).padStart(2, '0')}` : '';
+                      const isSelected = formattedDayStr === selectedDate;
+                      const cellBg = isSelected ? 'bg-[#FAF6EE] dark:bg-stone-800 font-bold' : 'bg-white dark:bg-[#202024]';
                       return (
-                        <div key={idx} className={"h-28 p-1.5 flex flex-col justify-between " + cellBg}>
+                        <div 
+                          key={idx} 
+                          onClick={() => {
+                            if (isCurrentMonth) {
+                              setSelectedDate(formattedDayStr);
+                              setView('daily');
+                            }
+                          }}
+                          className={"h-28 p-1.5 flex flex-col justify-between cursor-pointer hover:bg-stone-50 " + cellBg}
+                        >
                           <div className="flex justify-between items-center">
                             <span className={idx % 7 === 0 ? 'text-rose-500' : idx % 7 === 6 ? 'text-blue-500' : ''}>
-                              {dayNum <= 30 ? dayNum : dayNum - 30}
+                              {isCurrentMonth ? dayNum : dayNum - 30}
                             </span>
-                            <span className="text-[10px] text-stone-400 opacity-60">+</span>
+                            {isCurrentMonth && localStorage.getItem(`planbae_ink_daily_${formattedDayStr}`) && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#2C3A4E]" title="필기 기록 있음"></span>
+                            )}
                           </div>
-                          {dayNum === 8 && (
+                          {dayNum === 12 && (
                             <div className="bg-stone-100 dark:bg-stone-700 p-1 rounded text-[10px] text-stone-700 dark:text-stone-300">
                               20:00 40일 철야
                             </div>

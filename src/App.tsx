@@ -105,13 +105,23 @@ export default function App() {
   
   // UI Interaction States
   const [showStatusMenu, setShowStatusMenu] = useState<number | null>(null);
+  
+  // Quick Input & Inline Editor States
+  const [isQuickInputActive, setIsQuickInputActive] = useState(false);
+  const [quickInput, setQuickInput] = useState('');
+  const [quickPriority, setQuickPriority] = useState('');
+  const [quickQTag, setQuickQTag] = useState('');
+  const [quickTrack, setQuickTrack] = useState('');
+  const [quickDeadline, setQuickDeadline] = useState('');
+  const [activeQuickDropdown, setActiveQuickDropdown] = useState<'priority' | 'qTag' | 'track' | null>(null);
+  
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [activeDropdown, setActiveDropdown] = useState<'priority' | 'qTag' | 'track' | null>(null);
+  
   const [showTaskHelp, setShowTaskHelp] = useState(false);
   const [showScheduleHelp, setShowScheduleHelp] = useState(false);
   const [showCompassHelp, setShowCompassHelp] = useState(false);
   
-  const [quickInput, setQuickInput] = useState('');
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -357,42 +367,43 @@ export default function App() {
     }
   };
 
-  // Task Management
-  const handleAddNewTask = () => {
+  // Quick Inline Task Adding
+  const submitQuickTask = () => {
+    if (quickInput.trim() === '') return;
+    
+    // Default to priority B if not specified, or fallback to empty
+    const p = quickPriority || 'B';
+    
     const newTask = {
       id: Date.now(),
-      title: '',
+      title: quickInput.trim(),
       status: 'not_started',
-      priority: '',
+      priority: p,
       date: selectedDate,
-      qTag: '',
-      track: '',
-      deadline: '',
+      qTag: quickQTag,
+      track: quickTrack,
+      deadline: quickDeadline,
       memo: ''
     };
+    
     setTasks([newTask, ...tasks]);
-    setEditingTaskId(newTask.id);
-    setActiveDropdown(null);
+    
+    // Reset inputs
+    setQuickInput('');
+    setQuickPriority('');
+    setQuickQTag('');
+    setQuickTrack('');
+    setQuickDeadline('');
+    setActiveQuickDropdown(null);
   };
 
-  const handleAddQuickTask = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && quickInput.trim()) {
-      const newTask = {
-        id: Date.now(),
-        title: quickInput.trim(),
-        status: 'not_started',
-        priority: 'B',
-        date: selectedDate,
-        qTag: 'Q2',
-        track: '',
-        deadline: '',
-        memo: ''
-      };
-      setTasks([...tasks, newTask]);
-      setQuickInput('');
+  const handleQuickInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      submitQuickTask();
     }
   };
 
+  // Existing Task Management
   const handleAddSubtask = (projectId: number, e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && newSubtaskInput.trim()) {
       setProjects(projects.map(p => {
@@ -581,7 +592,7 @@ export default function App() {
         )}
 
         {/* Scrollable Content Container */}
-        <div ref={containerRef} className="flex-1 overflow-y-auto relative" style={{ WebkitOverflowScrolling: 'touch' }} onClick={() => { setEditingTaskId(null); setActiveDropdown(null); }}>
+        <div ref={containerRef} className="flex-1 overflow-y-auto relative" style={{ WebkitOverflowScrolling: 'touch' }} onClick={() => { setEditingTaskId(null); setActiveDropdown(null); setIsQuickInputActive(false); setActiveQuickDropdown(null); }}>
           <div className="relative min-h-[1400px] p-8">
 
             {/* PASSIVE INK LAYER */}
@@ -638,7 +649,7 @@ export default function App() {
                           <button className="w-10 h-10 rounded-lg flex items-center justify-center bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors">
                             <AlignJustify className="w-5 h-5" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleAddNewTask(); }} className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#355E3B] text-white shadow-md hover:bg-[#2A4B2F] transition-colors">
+                          <button onClick={(e) => { e.stopPropagation(); setIsQuickInputActive(true); }} className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#355E3B] text-white shadow-md hover:bg-[#2A4B2F] transition-colors">
                             <Plus className="w-5 h-5" />
                           </button>
                         </div>
@@ -658,15 +669,103 @@ export default function App() {
                         </div>
                       )}
 
-                      <div className="flex items-center space-x-2 mb-4">
-                        <input 
-                          type="text" 
-                          placeholder={`${dateDisplay.monthDay} 할 일 적기... (Enter로 추가)`}
-                          value={quickInput}
-                          onChange={(e) => setQuickInput(e.target.value)}
-                          onKeyDown={handleAddQuickTask}
-                          className="flex-1 border border-stone-300 dark:border-stone-700 rounded px-3 py-1.5 bg-[#FBF9F4] dark:bg-stone-800 text-xs outline-none focus:border-[#355E3B]"
-                        />
+                      {/* QUICK INPUT INLINE EDITOR */}
+                      <div 
+                        className={`flex flex-col mb-6 transition-all ${isQuickInputActive ? 'bg-[#2E353B] dark:bg-[#262A2E] text-white rounded-lg shadow-md' : 'bg-transparent border border-stone-300 dark:border-stone-700 rounded-md hover:border-[#355E3B]'}`}
+                        onClick={(e) => { e.stopPropagation(); setIsQuickInputActive(true); }}
+                      >
+                        <div className="flex items-center space-x-3 w-full py-3 px-3">
+                          <div className="shrink-0 w-4 h-4 border-2 border-stone-400 dark:border-stone-500 rounded-sm"></div>
+                          <input 
+                            type="text" 
+                            placeholder={`${dateDisplay.monthDay} 할 일 적기... (Enter로 추가)`}
+                            value={quickInput}
+                            onChange={(e) => setQuickInput(e.target.value)}
+                            onKeyDown={handleQuickInputKeyDown}
+                            className={`w-full bg-transparent text-base font-medium outline-none ${isQuickInputActive ? 'text-white placeholder-stone-400' : 'text-stone-800 dark:text-stone-200'}`}
+                          />
+                          {isQuickInputActive && (
+                            <div className="flex items-center space-x-3 text-stone-400 shrink-0">
+                              <FileText className="w-4 h-4 cursor-pointer hover:text-white" />
+                              <Info className="w-4 h-4 cursor-pointer hover:text-white" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Dropdown Options for New Task */}
+                        {isQuickInputActive && (
+                          <div className="px-3 pb-3 relative">
+                            <div className="flex flex-wrap gap-2 text-xs font-medium">
+                              
+                              <div className="relative">
+                                <button onClick={(e) => { e.stopPropagation(); setActiveQuickDropdown(activeQuickDropdown === 'priority' ? null : 'priority'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeQuickDropdown === 'priority' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
+                                  <AlignLeft className="w-3.5 h-3.5" /><span>{quickPriority || '순위'}</span>
+                                </button>
+                                {activeQuickDropdown === 'priority' && (
+                                  <div className="absolute top-9 left-0 w-32 bg-[#2E353B] border border-[#4A5560] rounded-lg shadow-xl p-1.5 z-40">
+                                    {[{id: '', label: '미분류'}, {id: 'A', label: 'A', color: '#F87171'}, {id: 'B', label: 'B', color: '#FBBF24'}, {id: 'C', label: 'C', color: '#60A5FA'}].map(opt => (
+                                      <button key={opt.id} onClick={(e) => { e.stopPropagation(); setQuickPriority(opt.id); setActiveQuickDropdown(null); }} className="w-full flex items-center justify-between px-2 py-1.5 text-left rounded hover:bg-[#404850] text-stone-200">
+                                        <div className="flex items-center space-x-2">
+                                          {opt.id !== '' && <span className="w-3 h-3 rounded-full" style={{ backgroundColor: opt.color }}></span>}
+                                          <span>{opt.label}</span>
+                                        </div>
+                                        {quickPriority === opt.id && <Check className="w-3.5 h-3.5 text-white" />}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="relative">
+                                <button onClick={(e) => { e.stopPropagation(); setActiveQuickDropdown(activeQuickDropdown === 'qTag' ? null : 'qTag'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeQuickDropdown === 'qTag' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
+                                  <LayoutGrid className="w-3.5 h-3.5" /><span>{quickQTag || '분류'}</span>
+                                </button>
+                                {activeQuickDropdown === 'qTag' && (
+                                  <div className="absolute top-9 left-0 w-32 bg-[#2E353B] border border-[#4A5560] rounded-lg shadow-xl p-1.5 z-40">
+                                    {[{id: '', label: '미분류'}, {id: 'Q1', label: 'Q1'}, {id: 'Q2', label: 'Q2'}, {id: 'Q3', label: 'Q3'}].map(opt => (
+                                      <button key={opt.id} onClick={(e) => { e.stopPropagation(); setQuickQTag(opt.id); setActiveQuickDropdown(null); }} className="w-full flex items-center justify-between px-2 py-1.5 text-left rounded hover:bg-[#404850] text-stone-200">
+                                        <div className="flex items-center space-x-2">
+                                          {opt.id !== '' && <LayoutGrid className="w-3.5 h-3.5 text-amber-500" />}
+                                          <span>{opt.label}</span>
+                                        </div>
+                                        {quickQTag === opt.id && <Check className="w-3.5 h-3.5 text-white" />}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="relative">
+                                <button onClick={(e) => { e.stopPropagation(); setActiveQuickDropdown(activeQuickDropdown === 'track' ? null : 'track'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeQuickDropdown === 'track' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
+                                  <Hash className="w-3.5 h-3.5" /><span>{quickTrack || '트랙'}</span>
+                                </button>
+                                {activeQuickDropdown === 'track' && (
+                                  <div className="absolute top-9 left-0 w-36 bg-[#2E353B] border border-[#4A5560] rounded-lg shadow-xl p-1.5 z-40">
+                                    {[{id: '', label: '미지정'}, {id: 'Personal', label: 'Personal'}, {id: 'Pastoral', label: 'Pastoral'}].map(opt => (
+                                      <button key={opt.id} onClick={(e) => { e.stopPropagation(); setQuickTrack(opt.id); setActiveQuickDropdown(null); }} className="w-full flex items-center justify-between px-2 py-1.5 text-left rounded hover:bg-[#404850] text-stone-200">
+                                        <div className="flex items-center space-x-2">
+                                          {opt.id === 'Personal' && <User className="w-3.5 h-3.5 text-blue-400" />}
+                                          {opt.id === 'Pastoral' && <FolderKanban className="w-3.5 h-3.5 text-amber-600" />}
+                                          <span>{opt.label}</span>
+                                        </div>
+                                        {quickTrack === opt.id && <Check className="w-3.5 h-3.5 text-white" />}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="relative flex items-center">
+                                <label className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-[#3A4248] text-stone-300 hover:bg-[#404850] cursor-pointer transition-colors">
+                                  <CalendarDays className="w-3.5 h-3.5" />
+                                  <span>{quickDeadline || '마감일'}</span>
+                                  <input type="date" className="absolute opacity-0 w-0 h-0" value={quickDeadline} onChange={(e) => setQuickDeadline(e.target.value)} />
+                                </label>
+                              </div>
+
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="space-y-4">
@@ -690,7 +789,7 @@ export default function App() {
                                     <div key={task.id} className="relative flex flex-col border-b border-dashed border-stone-200 dark:border-stone-800 text-xs transition-colors">
                                       <div 
                                         className={`flex flex-col rounded-lg transition-all ${isEditing ? 'bg-[#2E353B] dark:bg-[#262A2E] text-white shadow-md' : 'hover:bg-stone-50 dark:hover:bg-stone-800/40'}`}
-                                        onClick={(e) => { e.stopPropagation(); if(!isEditing) { setEditingTaskId(task.id); setActiveDropdown(null); } }}
+                                        onClick={(e) => { e.stopPropagation(); if(!isEditing) { setEditingTaskId(task.id); setActiveDropdown(null); setIsQuickInputActive(false); } }}
                                       >
                                         <div className="flex items-center justify-between py-3 px-3">
                                           <div className="flex items-center space-x-3 w-full">
@@ -727,11 +826,10 @@ export default function App() {
                                           )}
                                         </div>
 
-                                        {/* Floating Properties Toolbar (Only visible when editing) */}
+                                        {/* Floating Properties Toolbar for Existing Task */}
                                         {isEditing && (
                                           <div className="px-3 pb-3 relative">
                                             <div className="flex flex-wrap gap-2 text-xs font-medium">
-                                              {/* 순위 드롭다운 */}
                                               <div className="relative">
                                                 <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'priority' ? null : 'priority'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeDropdown === 'priority' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
                                                   <AlignLeft className="w-3.5 h-3.5" /><span>순위</span>
@@ -751,7 +849,6 @@ export default function App() {
                                                 )}
                                               </div>
                                               
-                                              {/* 분류 드롭다운 */}
                                               <div className="relative">
                                                 <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'qTag' ? null : 'qTag'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeDropdown === 'qTag' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
                                                   <LayoutGrid className="w-3.5 h-3.5" /><span>분류</span>
@@ -771,7 +868,6 @@ export default function App() {
                                                 )}
                                               </div>
 
-                                              {/* 트랙 드롭다운 */}
                                               <div className="relative">
                                                 <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'track' ? null : 'track'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeDropdown === 'track' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
                                                   <Hash className="w-3.5 h-3.5" /><span>{task.track || '트랙'}</span>
@@ -792,7 +888,6 @@ export default function App() {
                                                 )}
                                               </div>
                                               
-                                              {/* 마감일 선택 */}
                                               <div className="relative flex items-center">
                                                 <label className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-[#3A4248] text-stone-300 hover:bg-[#404850] cursor-pointer transition-colors">
                                                   <CalendarDays className="w-3.5 h-3.5" />
@@ -804,7 +899,7 @@ export default function App() {
                                           </div>
                                         )}
 
-                                        {/* Property Badges (Visible when NOT editing) -> Fixed to match the provided screenshot */}
+                                        {/* Property Badges (Visible when NOT editing) */}
                                         {!isEditing && (task.priority || task.qTag || task.track || task.deadline) && (
                                           <div className="pl-9 pr-3 pb-3 flex items-center space-x-1.5 -mt-1.5">
                                             {task.priority && (
@@ -824,7 +919,7 @@ export default function App() {
                                             )}
                                             {task.deadline && (
                                               <span className="bg-[#EAE8E3] text-[#6B6863] dark:bg-stone-700 dark:text-stone-300 text-[10px] font-medium px-2 py-0.5 rounded-full">
-                                                {task.deadline.slice(5).replace('-', '.')}
+                                                {task.deadline.slice(2).replace(/-/g, '.')}
                                               </span>
                                             )}
                                           </div>
@@ -1036,7 +1131,15 @@ export default function App() {
                     <div className="text-[11px] uppercase tracking-wider text-stone-600">MONTHLY</div>
                     <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">2026년 11월</h1>
                   </div>
+                  <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
+                    <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronLeft className="w-4 h-4" /></button>
+                    <button onClick={() => setView('review')} className="px-2 font-medium flex items-center space-x-1">
+                      <FileText className="w-3.5 h-3.5 mr-1" /> 월간 Review
+                    </button>
+                    <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronRight className="w-4 h-4" /></button>
+                  </div>
                 </div>
+
                 <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
                   <div className="grid grid-cols-7 gap-px text-center text-xs font-semibold text-stone-600 mb-2">
                     <div className="text-rose-500">주일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div className="text-blue-500">토</div>

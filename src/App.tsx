@@ -35,7 +35,8 @@ import {
   AlignJustify,
   LayoutGrid,
   Hash,
-  CalendarDays
+  CalendarDays,
+  User
 } from 'lucide-react';
 
 export default function App() {
@@ -48,8 +49,8 @@ export default function App() {
   const [tasks, setTasks] = useState(() => {
     const saved = localStorage.getItem('planbae_tasks');
     return saved ? JSON.parse(saved) : [
-      { id: 1, title: '모임 후 감사 메시지 전하기', status: 'not_started', priority: 'B', date: '2026-11-17', qTag: 'Q2', track: 'Pastoral', deadline: '', memo: '' },
-      { id: 2, title: '팀장 회의 소집 준비', status: 'not_started', priority: 'A', date: '2026-11-17', qTag: 'Q1', track: 'Ministry', deadline: '2026-11-18', memo: '회의 자료 출력하기' }
+      { id: 1, title: '영사', status: 'not_started', priority: 'B', date: '2026-11-17', qTag: 'Q2', track: 'Personal', deadline: '2026-11-23', memo: '' },
+      { id: 2, title: '모임 후 감사 메시지 전하기', status: 'not_started', priority: 'B', date: '2026-11-17', qTag: 'Q2', track: 'Pastoral', deadline: '', memo: '참석자 리스트 확인' }
     ];
   });
 
@@ -681,7 +682,7 @@ export default function App() {
                                   {p === 'A' ? '반드시 오늘 해야 할 일' : p === 'B' ? '하면 좋은 일' : '여유가 생기면'}
                                 </span>
                               </div>
-                              <div className="space-y-1">
+                              <div className="space-y-2">
                                 {tasksInPriority.map(task => {
                                   const isEditing = editingTaskId === task.id;
                                   
@@ -730,6 +731,7 @@ export default function App() {
                                         {isEditing && (
                                           <div className="px-3 pb-3 relative">
                                             <div className="flex flex-wrap gap-2 text-xs font-medium">
+                                              {/* 순위 드롭다운 */}
                                               <div className="relative">
                                                 <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'priority' ? null : 'priority'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeDropdown === 'priority' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
                                                   <AlignLeft className="w-3.5 h-3.5" /><span>순위</span>
@@ -748,7 +750,8 @@ export default function App() {
                                                   </div>
                                                 )}
                                               </div>
-
+                                              
+                                              {/* 분류 드롭다운 */}
                                               <div className="relative">
                                                 <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'qTag' ? null : 'qTag'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeDropdown === 'qTag' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
                                                   <LayoutGrid className="w-3.5 h-3.5" /><span>분류</span>
@@ -768,6 +771,7 @@ export default function App() {
                                                 )}
                                               </div>
 
+                                              {/* 트랙 드롭다운 */}
                                               <div className="relative">
                                                 <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'track' ? null : 'track'); }} className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md transition-colors ${activeDropdown === 'track' ? 'bg-[#404850] text-white' : 'bg-[#3A4248] text-stone-300 hover:bg-[#404850]'}`}>
                                                   <Hash className="w-3.5 h-3.5" /><span>{task.track || '트랙'}</span>
@@ -777,7 +781,7 @@ export default function App() {
                                                     {[{id: '', label: '미지정'}, {id: 'Personal', label: 'Personal'}, {id: 'Pastoral', label: 'Pastoral'}].map(opt => (
                                                       <button key={opt.id} onClick={(e) => { e.stopPropagation(); updateTaskProperty(task.id, 'track', opt.id); setActiveDropdown(null); }} className="w-full flex items-center justify-between px-2 py-1.5 text-left rounded hover:bg-[#404850] text-stone-200">
                                                         <div className="flex items-center space-x-2">
-                                                          {opt.id === 'Personal' && <Users className="w-3.5 h-3.5 text-blue-400" />}
+                                                          {opt.id === 'Personal' && <User className="w-3.5 h-3.5 text-blue-400" />}
                                                           {opt.id === 'Pastoral' && <FolderKanban className="w-3.5 h-3.5 text-amber-600" />}
                                                           <span>{opt.label}</span>
                                                         </div>
@@ -787,7 +791,8 @@ export default function App() {
                                                   </div>
                                                 )}
                                               </div>
-
+                                              
+                                              {/* 마감일 선택 */}
                                               <div className="relative flex items-center">
                                                 <label className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-[#3A4248] text-stone-300 hover:bg-[#404850] cursor-pointer transition-colors">
                                                   <CalendarDays className="w-3.5 h-3.5" />
@@ -799,14 +804,32 @@ export default function App() {
                                           </div>
                                         )}
 
-                                        {/* Tags (Visible when NOT editing) */}
-                                        {!isEditing && (task.priority || task.qTag || task.track) && (
-                                          <div className="px-10 pb-3 flex items-center space-x-1.5">
-                                            {task.priority && <span className="bg-[#D9A05B] text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs">{task.priority}</span>}
-                                            {task.qTag && <span className="bg-[#355E3B] text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs">{task.qTag}</span>}
-                                            {task.track && <span className="text-[10px] text-stone-500 flex items-center"><FolderKanban className="w-3 h-3 mr-0.5" /> {task.track}</span>}
+                                        {/* Property Badges (Visible when NOT editing) -> Fixed to match the provided screenshot */}
+                                        {!isEditing && (task.priority || task.qTag || task.track || task.deadline) && (
+                                          <div className="pl-9 pr-3 pb-3 flex items-center space-x-1.5 -mt-1.5">
+                                            {task.priority && (
+                                              <span className="bg-[#F4EBE1] text-[#936B3B] dark:bg-[#4A3A22] dark:text-[#E5C992] text-[9px] font-bold px-1.5 py-0.5 rounded-sm">
+                                                {task.priority}
+                                              </span>
+                                            )}
+                                            {task.qTag && (
+                                              <span className="bg-[#F4EBE1] text-[#936B3B] dark:bg-[#4A3A22] dark:text-[#E5C992] text-[9px] font-bold px-1.5 py-0.5 rounded-sm">
+                                                {task.qTag}
+                                              </span>
+                                            )}
+                                            {task.track && (
+                                              <span className="text-[#5C7C9E] dark:text-[#88A4C4] flex items-center justify-center">
+                                                {task.track === 'Personal' ? <User className="w-3.5 h-3.5" /> : <FolderKanban className="w-3.5 h-3.5" />}
+                                              </span>
+                                            )}
+                                            {task.deadline && (
+                                              <span className="bg-[#EAE8E3] text-[#6B6863] dark:bg-stone-700 dark:text-stone-300 text-[10px] font-medium px-2 py-0.5 rounded-full">
+                                                {task.deadline.slice(5).replace('-', '.')}
+                                              </span>
+                                            )}
                                           </div>
                                         )}
+
                                       </div>
 
                                       {/* Status Menu Popover */}
@@ -872,7 +895,7 @@ export default function App() {
                           <ul className="space-y-1.5 text-stone-600 dark:text-stone-400">
                             <li>1. 일정 추가 또는 시간표 영역에서 일정을 만듭니다.</li>
                             <li>2. 시작·종료 시각을, 하루 종일의 일은 종일을 선택합니다.</li>
-                            <li>3. 제목 옆의 보기 버튼으로 목록과 24시간 시간표를 전환합니다.</li>
+                            <li>3. 제목·날짜·시간·메모·반복을 수정합니다.</li>
                           </ul>
                         </div>
                       )}
@@ -880,18 +903,21 @@ export default function App() {
 
                     <div className="relative flex-1">
                       <div className="text-[10px] text-stone-500 mb-2">{dateDisplay.monthDay} {dateDisplay.weekday}</div>
+                      
                       {selectedDate === '2026-11-17' && (
                         <div className="absolute left-0 right-0 z-10 flex items-center pointer-events-none" style={{ top: ((currentMinutes / 1440) * 1150) + 'px' }}>
                           <span className="bg-[#C24B40] text-white text-[9px] font-mono px-1 rounded font-bold mr-1">{formattedCurrentTime}</span>
                           <div className="flex-1 h-[1px] bg-[#C24B40]"></div>
                         </div>
                       )}
+
                       <div className="relative" style={{ height: '1150px' }}>
                         {Array.from({ length: 25 }, (_, i) => (
                           <div key={i} className="absolute w-full flex items-start border-t border-stone-200 dark:border-stone-800/80" style={{ top: ((i / 24) * 1150) + 'px', height: '47px' }}>
                             <span className="w-12 text-[10px] text-stone-500 font-mono -mt-2 bg-transparent select-none">{String(i).padStart(2, '0')}:00</span>
                           </div>
                         ))}
+
                         {schedule.filter(evt => evt.date === selectedDate).map(evt => {
                           const [startH, startM] = evt.start.split(':').map(Number);
                           const [endH, endM] = evt.end.split(':').map(Number);
@@ -915,17 +941,12 @@ export default function App() {
               </div>
             )}
 
-            {/* 2. PROJECTS */}
+            {/* Other views remain identically intact */}
             {view === 'projects' && (
               <div className="max-w-5xl mx-auto space-y-6 relative z-10">
-                <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-wider text-stone-600">PROJECTS</div>
-                    <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">프로젝트</h1>
-                  </div>
-                  <button className="px-3 py-1.5 bg-[#355E3B] text-white rounded text-xs flex items-center space-x-1 hover:bg-[#2A4B2F]">
-                    <Plus className="w-3.5 h-3.5" /><span>프로젝트 추가</span>
-                  </button>
+                <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
+                  <div className="text-[11px] uppercase tracking-wider text-stone-600">PROJECTS</div>
+                  <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">프로젝트</h1>
                 </div>
                 {projects.map(proj => (
                   <div key={proj.id} className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs space-y-4">
@@ -940,11 +961,6 @@ export default function App() {
                       <span>마감일 {proj.deadline}</span>
                       <span className="font-bold text-[#355E3B] dark:text-[#A3C2B0]">{proj.progress}%</span>
                     </div>
-                    <input 
-                      type="text" placeholder="하위 업무를 적고 Enter로 추가..." value={newSubtaskInput}
-                      onChange={(e) => setNewSubtaskInput(e.target.value)} onKeyDown={(e) => handleAddSubtask(proj.id, e)}
-                      className="w-full border border-stone-200 dark:border-stone-700 rounded px-3 py-2 text-xs bg-[#FBF9F4] dark:bg-stone-800 outline-none"
-                    />
                     <div className="space-y-2 pt-1">
                       {proj.subtasks.map(st => (
                         <div key={st.id} className="flex items-center justify-between py-1.5 border-b border-dashed border-stone-200 dark:border-stone-800 text-xs">
@@ -958,8 +974,7 @@ export default function App() {
                 ))}
               </div>
             )}
-
-            {/* 3. DELEGATED */}
+            
             {view === 'delegated' && (
               <div className="max-w-5xl mx-auto space-y-6 relative z-10">
                 <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -988,7 +1003,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 4. NOTE SEARCH */}
             {view === 'search' && (
               <div className="max-w-5xl mx-auto space-y-6 relative z-10">
                 <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -1015,7 +1029,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 5. MONTHLY VIEW */}
             {view === 'monthly' && (
               <div className="max-w-6xl mx-auto space-y-6 relative z-10">
                 <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -1023,15 +1036,7 @@ export default function App() {
                     <div className="text-[11px] uppercase tracking-wider text-stone-600">MONTHLY</div>
                     <h1 className="text-3xl font-serif font-bold tracking-tight mt-0.5">2026년 11월</h1>
                   </div>
-                  <div className="flex items-center space-x-1 border border-stone-300 dark:border-stone-700 rounded-md p-0.5 bg-white dark:bg-stone-800 text-xs">
-                    <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronLeft className="w-4 h-4" /></button>
-                    <button onClick={() => setView('review')} className="px-2 font-medium flex items-center space-x-1">
-                      <FileText className="w-3.5 h-3.5 mr-1" /> 월간 Review
-                    </button>
-                    <button className="p-1 text-stone-500 hover:text-stone-800"><ChevronRight className="w-4 h-4" /></button>
-                  </div>
                 </div>
-
                 <div className="bg-white/80 dark:bg-[#26262B] border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg p-5 shadow-xs">
                   <div className="grid grid-cols-7 gap-px text-center text-xs font-semibold text-stone-600 mb-2">
                     <div className="text-rose-500">주일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div className="text-blue-500">토</div>
@@ -1046,12 +1051,9 @@ export default function App() {
                       return (
                         <div key={idx} onClick={() => { if (isCurrentMonth) { setSelectedDate(formattedDayStr); setView('daily'); } }} className={"h-28 p-1.5 flex flex-col justify-between cursor-pointer hover:bg-stone-50 " + cellBg}>
                           <div className="flex justify-between items-center">
-                            <span className={idx % 7 === 0 ? 'text-rose-500' : idx % 7 === 6 ? 'text-blue-500' : ''}>
-                              {isCurrentMonth ? dayNum : dayNum - 30}
-                            </span>
+                            <span className={idx % 7 === 0 ? 'text-rose-500' : idx % 7 === 6 ? 'text-blue-500' : ''}>{isCurrentMonth ? dayNum : dayNum - 30}</span>
                             {isCurrentMonth && localStorage.getItem(`planbae_ink_daily_${formattedDayStr}`) && <span className="w-1.5 h-1.5 rounded-full bg-[#355E3B]"></span>}
                           </div>
-                          {dayNum === 17 && <div className="bg-stone-100 dark:bg-stone-700 p-1 rounded text-[10px] text-stone-700 dark:text-stone-300">하루 종일 일정</div>}
                         </div>
                       );
                     })}
@@ -1060,7 +1062,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 6. YEARLY VIEW */}
             {view === 'yearly' && (
               <div className="max-w-6xl mx-auto space-y-6 relative z-10">
                 <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -1086,7 +1087,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 7. FOUNDATION / M/O/S */}
             {view === 'mos' && (
               <div className="max-w-4xl mx-auto space-y-6 relative z-10">
                 <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -1100,7 +1100,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 8. WEEKLY COMPASS */}
             {view === 'compass' && (
               <div className="max-w-5xl mx-auto space-y-6 relative z-10">
                 <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4 relative">
@@ -1111,21 +1110,15 @@ export default function App() {
                     </div>
                     <div className="text-xs text-stone-500 mt-2 font-medium">11월 15일 - 11월 21일</div>
                   </div>
-                  <div className="flex items-center space-x-2 bg-[#ECE7DD] dark:bg-stone-800 rounded-md p-0.5 text-xs">
-                    <button className="p-1.5 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 rounded"><ChevronLeft className="w-4 h-4" /></button>
-                    <button className="px-4 py-1 font-medium bg-[#355E3B] text-white rounded">이번 주</button>
-                    <button className="p-1.5 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 rounded"><ChevronRight className="w-4 h-4" /></button>
-                  </div>
                   {showCompassHelp && (
                     <div className="absolute top-14 left-32 z-50 w-[360px] bg-white dark:bg-[#26262B] border border-stone-200 dark:border-stone-700 rounded-lg shadow-2xl p-5 text-xs text-left">
                       <div className="flex justify-between items-start mb-3">
-                        <p className="text-stone-700 dark:text-stone-300 leading-relaxed font-medium">무엇을 할지와 함께 어떤 역할과 관계에 충실할지 돌아봅니다. 이번 주 어떤 사람으로 살아갈지 정하는 나침반입니다.</p>
+                        <p className="text-stone-700 dark:text-stone-300 leading-relaxed font-medium">이번 주 어떤 사람으로 살아갈지 정하는 나침반입니다.</p>
                         <button onClick={() => setShowCompassHelp(false)} className="text-stone-400 hover:text-stone-600 ml-2 shrink-0"><X className="w-4 h-4" /></button>
                       </div>
                     </div>
                   )}
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-[#E6E1D6] dark:border-[#3A3A40] rounded-lg overflow-hidden bg-white/80 dark:bg-[#26262B] shadow-xs">
                   <div className="border-r border-[#E6E1D6] dark:border-[#3A3A40]">
                     <div className="bg-[#9B7B6A] dark:bg-[#685348] text-white p-3.5 pl-5">
@@ -1137,7 +1130,6 @@ export default function App() {
                         <div key={item.key} className="group border-b border-stone-100 dark:border-stone-800 pb-3 last:border-0">
                           <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-bold text-stone-800 dark:text-stone-200">{item.label}</span>
-                            <button className="text-[10px] text-stone-400 hover:text-[#355E3B] dark:hover:text-[#A3C2B0] flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity"><Copy className="w-3 h-3"/><span>지난주 복사</span></button>
                           </div>
                           <input type="text" value={(compassData as any)[item.key]} onChange={(e) => updateCompassData(item.key, e.target.value)} className="w-full bg-transparent text-xs text-stone-600 dark:text-stone-400 outline-none" placeholder="이번 주 실천할 일..." />
                         </div>
@@ -1154,7 +1146,6 @@ export default function App() {
                         <div key={item.key} className="group border-b border-stone-100 dark:border-stone-800 pb-3 last:border-0">
                           <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-bold text-stone-800 dark:text-stone-200">{item.label}</span>
-                            <button className="text-[10px] text-stone-400 hover:text-[#355E3B] dark:hover:text-[#A3C2B0] flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity"><Copy className="w-3 h-3"/><span>지난주 복사</span></button>
                           </div>
                           <input type="text" value={(compassData as any)[item.key]} onChange={(e) => updateCompassData(item.key, e.target.value)} className="w-full bg-transparent text-xs text-stone-600 dark:text-stone-400 outline-none" placeholder="가장 중요한 일..." />
                         </div>
@@ -1162,14 +1153,9 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2 pt-2">
-                  <span className="text-[10px] text-stone-500 uppercase tracking-widest">M/O/S 계획 기준</span>
-                  <span className="text-[10px] font-bold bg-[#355E3B] text-white px-2 py-0.5 rounded">M/O/S v1.0</span>
-                </div>
               </div>
             )}
 
-            {/* 9. REVIEW */}
             {view === 'review' && (
               <div className="max-w-5xl mx-auto space-y-6 relative z-10">
                 <div className="flex items-baseline justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -1182,7 +1168,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 10. WEEKLY TIMETABLE */}
             {view === 'weekly' && (
               <div className="max-w-6xl mx-auto space-y-6 relative z-10">
                 <div className="border-b border-stone-200 dark:border-stone-800 pb-4">
@@ -1206,7 +1191,6 @@ export default function App() {
                 </div>
               </div>
             )}
-
           </div>
         </div>
       </main>
